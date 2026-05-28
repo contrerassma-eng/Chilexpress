@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import SignaturePad from './SignaturePad.jsx';
-import { buildReport, reportHtml, reportCsv, downloadFile, fileStamp } from '../lib/report.js';
+import { buildReport } from '../lib/report.js';
 import { nowIso } from '../lib/format.js';
 
-export default function CloseShiftDialog({ state, dispatch, onClose }) {
+export default function CloseShiftDialog({ state, dispatch, onClose, onGenerated }) {
   const sigRef = useRef(null);
   const [err, setErr] = useState('');
   const closedAt = useRef(nowIso()).current;
@@ -16,9 +16,7 @@ export default function CloseShiftDialog({ state, dispatch, onClose }) {
       return;
     }
     const signature = sigRef.current.toDataURL();
-    const stamp = fileStamp(closedAt);
-    downloadFile(`reporte_turno_${stamp}.html`, reportHtml(report, signature), 'text/html;charset=utf-8');
-    downloadFile(`paquetes_${stamp}.csv`, reportCsv(state), 'text/csv;charset=utf-8');
+    onGenerated({ report, signature, csvState: state });
     dispatch({ type: 'CLOSE_SHIFT', totals: t });
     onClose();
   }
@@ -44,7 +42,7 @@ export default function CloseShiftDialog({ state, dispatch, onClose }) {
         {err && <p className="err-msg">{err}</p>}
 
         <div className="import-foot">
-          <span className="muted">Se descargara el reporte (HTML para PDF) y un CSV.</span>
+          <span className="muted">Al cerrar se abre el reporte para guardarlo como PDF.</span>
           <div className="row-gap">
             <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
             <button className="btn btn--primary" onClick={confirm}>Cerrar y generar reporte</button>

@@ -171,6 +171,38 @@ input, textarea { font-family: inherit; font-size: 16px; }
 .signature-canvas { width: 100%; height: 180px; border: 1px solid var(--line); border-radius: 10px; background: #fff; touch-action: none; }
 .btn--sm.btn--ghost { color: var(--muted); border-color: var(--line); margin-top: 6px; }
 
+/* ---------- Report view ---------- */
+.report-overlay { min-height: 100%; background: #fff; display: flex; flex-direction: column; }
+.report-bar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--brand); border-bottom: 1px solid var(--brand-dark);
+}
+.report-bar .btn--ghost { color: #fff; border-color: rgba(255,255,255,.5); }
+.report-doc { padding: 18px 16px 40px; max-width: 760px; margin: 0 auto; width: 100%; color: #111; }
+.report-doc h1 { font-size: 20px; margin: 0 0 8px; }
+.report-doc h2 { font-size: 15px; margin: 22px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.report-meta { font-size: 13px; color: #444; line-height: 1.6; }
+.report-cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.rc { flex: 1; min-width: 110px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.rc__n { font-size: 24px; font-weight: 800; }
+.rc__l { font-size: 12px; color: #666; }
+.rc__n.green { color: var(--green); } .rc__n.amber { color: var(--amber-dark); }
+.report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.report-table th, .report-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+.report-table th { background: var(--gray-bg); }
+.report-sign { margin-top: 28px; }
+.report-sign__img { border: 1px solid #ccc; border-radius: 8px; max-width: 340px; width: 100%; background: #fff; }
+.report-sign__line { margin-top: 8px; font-size: 13px; }
+
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .report-overlay { display: block; }
+  .report-doc { max-width: none; padding: 0; }
+  .report-table { font-size: 11px; }
+}
+
 /* ---------- Start shift ---------- */
 .start-shift { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(160deg, var(--brand), var(--brand-dark)); }
 .start-card { background: #fff; border-radius: 18px; padding: 28px 22px; width: 100%; max-width: 380px; text-align: center; box-shadow: 0 18px 40px rgba(0,0,0,.25); }

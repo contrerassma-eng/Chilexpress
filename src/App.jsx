@@ -6,6 +6,7 @@ import FilterBar from './components/FilterBar.jsx';
 import PackageList from './components/PackageList.jsx';
 import ImportPanel from './components/ImportPanel.jsx';
 import CloseShiftDialog from './components/CloseShiftDialog.jsx';
+import ReportView from './components/ReportView.jsx';
 import StartShift from './components/StartShift.jsx';
 
 const STATUS_ORDER = { [STATUS.RECIBIDO]: 0, [STATUS.ESPERADO]: 1, [STATUS.ENTREGADO]: 2 };
@@ -18,6 +19,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [showClose, setShowClose] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [report, setReport] = useState(null);
 
   const all = useMemo(() => Object.values(state.packages), [state.packages]);
 
@@ -37,6 +39,10 @@ export default function App() {
       return so !== 0 ? so : a.code.localeCompare(b.code);
     });
   }, [all, filter, query]);
+
+  if (report) {
+    return <ReportView payload={report} onClose={() => setReport(null)} />;
+  }
 
   if (!state.shift) {
     return <StartShift dispatch={dispatch} />;
@@ -74,7 +80,14 @@ export default function App() {
       </main>
 
       {showImport && <ImportPanel dispatch={dispatch} onClose={() => setShowImport(false)} />}
-      {showClose && <CloseShiftDialog state={state} dispatch={dispatch} onClose={() => setShowClose(false)} />}
+      {showClose && (
+        <CloseShiftDialog
+          state={state}
+          dispatch={dispatch}
+          onClose={() => setShowClose(false)}
+          onGenerated={(payload) => setReport(payload)}
+        />
+      )}
     </div>
   );
 }
