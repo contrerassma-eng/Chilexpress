@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { ICON_DATA_URI } from '../lib/brand.js';
 
 export default function StartShift({ dispatch }) {
   const [name, setName] = useState('');
   return (
     <div className="start-shift">
       <div className="start-card">
-        <img src="/icon.svg" alt="" width="64" height="64" />
+        <img src={ICON_DATA_URI} alt="" width="64" height="64" />
         <h1>Recepcion y Entrega</h1>
         <p className="muted">Inicia el turno con el nombre del responsable para empezar a escanear.</p>
         <form
