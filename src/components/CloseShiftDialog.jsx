@@ -17,7 +17,7 @@ export default function CloseShiftDialog({ state, dispatch, onClose, onGenerated
     }
     const signature = sigRef.current.toDataURL();
     onGenerated({ report, signature, csvState: state });
-    dispatch({ type: 'CLOSE_SHIFT', totals: t });
+    dispatch({ type: 'CLOSE_SHIFT', totals: t, signature });
     onClose();
   }
 

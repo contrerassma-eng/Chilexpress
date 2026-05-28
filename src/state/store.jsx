@@ -107,12 +107,16 @@ function reducer(state, action) {
 
     case 'CLOSE_SHIFT': {
       const closed = {
+        id: state.shift?.startedAt || nowIso(),
         responsable: state.shift?.responsable || '-',
         startedAt: state.shift?.startedAt || null,
         closedAt: nowIso(),
-        totals: action.totals
+        totals: action.totals,
+        packages: Object.values(state.packages),
+        signature: action.signature || null
       };
-      return { ...state, shift: null, history: [closed, ...state.history].slice(0, 60) };
+      // Limpia la pantalla para el proximo turno y archiva el turno cerrado.
+      return { ...state, shift: null, packages: {}, history: [closed, ...state.history].slice(0, 30) };
     }
 
     default:

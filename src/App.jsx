@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useStore, STATUS } from './state/store.jsx';
 import { fmtTime } from './lib/format.js';
+import { computeReport } from './lib/report.js';
 import ScannerPanel from './components/ScannerPanel.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import PackageList from './components/PackageList.jsx';
 import ImportPanel from './components/ImportPanel.jsx';
 import CloseShiftDialog from './components/CloseShiftDialog.jsx';
 import ReportView from './components/ReportView.jsx';
+import HistoryView from './components/HistoryView.jsx';
 import StartShift from './components/StartShift.jsx';
 
 const STATUS_ORDER = { [STATUS.RECIBIDO]: 0, [STATUS.ESPERADO]: 1, [STATUS.ENTREGADO]: 2 };
@@ -20,6 +22,19 @@ export default function App() {
   const [showClose, setShowClose] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [report, setReport] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  function openArchiveReport(shift) {
+    const pkgs = shift.packages || [];
+    const rep = computeReport({
+      packages: pkgs,
+      responsable: shift.responsable,
+      startedAt: shift.startedAt,
+      closedAt: shift.closedAt
+    });
+    const csvState = { packages: Object.fromEntries(pkgs.map((p) => [p.code, p])) };
+    setReport({ report: rep, signature: shift.signature || null, csvState });
+  }
 
   const all = useMemo(() => Object.values(state.packages), [state.packages]);
 
@@ -44,8 +59,18 @@ export default function App() {
     return <ReportView payload={report} onClose={() => setReport(null)} />;
   }
 
+  if (showHistory) {
+    return (
+      <HistoryView
+        history={state.history}
+        onClose={() => setShowHistory(false)}
+        onOpenReport={openArchiveReport}
+      />
+    );
+  }
+
   if (!state.shift) {
-    return <StartShift dispatch={dispatch} />;
+    return <StartShift dispatch={dispatch} onShowHistory={() => setShowHistory(true)} />;
   }
 
   return (
@@ -61,6 +86,7 @@ export default function App() {
           <button className="btn btn--sm btn--ghost" aria-label="Menu" onClick={() => setMenuOpen((o) => !o)}>⋮</button>
           {menuOpen && (
             <div className="menu" onClick={() => setMenuOpen(false)}>
+              <button onClick={() => setShowHistory(true)}>Historial de turnos</button>
               <button onClick={() => dispatch({ type: 'CLEAR_DELIVERED' })}>Quitar entregados de la lista</button>
               <button
                 className="danger"

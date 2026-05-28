@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ICON_DATA_URI } from '../lib/brand.js';
 
-export default function StartShift({ dispatch }) {
+export default function StartShift({ dispatch, onShowHistory }) {
   const [name, setName] = useState('');
   return (
     <div className="start-shift">
@@ -26,6 +26,11 @@ export default function StartShift({ dispatch }) {
             Iniciar turno
           </button>
         </form>
+        {onShowHistory && (
+          <button className="btn btn--ghost start-history" onClick={onShowHistory}>
+            Ver historial de turnos
+          </button>
+        )}
       </div>
     </div>
   );

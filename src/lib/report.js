@@ -1,23 +1,21 @@
 import { STATUS } from '../state/store.jsx';
 import { fmtDateForFile } from './format.js';
 
-export function buildReport(state, closedAt) {
-  const shift = state.shift;
-  const pkgs = Object.values(state.packages);
-  const startedAt = shift?.startedAt || null;
+export function computeReport({ packages, responsable, startedAt, closedAt }) {
+  const pkgs = packages || [];
 
   const entregados = pkgs.filter((p) => p.status === STATUS.ENTREGADO);
   const recibidos = pkgs.filter((p) => p.status === STATUS.RECIBIDO);
   const esperados = pkgs.filter((p) => p.status === STATUS.ESPERADO);
 
-  // Entregas hechas dentro de la ventana del turno actual.
+  // Entregas hechas dentro de la ventana del turno.
   const entregadosTurno = entregados.filter(
     (p) => p.deliveredAt && (!startedAt || p.deliveredAt >= startedAt)
   );
 
   return {
-    responsable: shift?.responsable || '-',
-    startedAt,
+    responsable: responsable || '-',
+    startedAt: startedAt || null,
     closedAt,
     totals: {
       total: pkgs.length,
@@ -32,6 +30,15 @@ export function buildReport(state, closedAt) {
     pendientes: recibidos.sort((a, b) => (a.code < b.code ? -1 : 1)),
     sinLlegar: esperados.sort((a, b) => (a.code < b.code ? -1 : 1))
   };
+}
+
+export function buildReport(state, closedAt) {
+  return computeReport({
+    packages: Object.values(state.packages),
+    responsable: state.shift?.responsable || '-',
+    startedAt: state.shift?.startedAt || null,
+    closedAt
+  });
 }
 
 export function reportCsv(state) {
