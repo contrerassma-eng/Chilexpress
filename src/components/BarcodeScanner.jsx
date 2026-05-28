@@ -2,20 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { DecodeHintType, BarcodeFormat } from '@zxing/library';
 
-// Formatos 1D habituales para etiquetas de paqueteria (codigos de 7-8 digitos
-// suelen ser Code 128 / Code 39 / ITF, pero dejamos un set amplio).
+// Chile Express usa codigos EAN-13 (13 digitos con digito verificador).
+// Restringimos a EAN-13 + Code-128 para evitar lecturas basura (Code-39 tipo
+// "B1A", EAN-8 de 8 digitos, QR, etc.). El verificador del EAN-13 ya descarta
+// la mayoria de las lecturas erroneas.
 const hints = new Map();
 hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.CODE_93,
-  BarcodeFormat.ITF,
-  BarcodeFormat.CODABAR,
   BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.QR_CODE
+  BarcodeFormat.CODE_128
 ]);
 hints.set(DecodeHintType.TRY_HARDER, true);
 

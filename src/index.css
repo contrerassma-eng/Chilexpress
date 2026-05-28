@@ -95,6 +95,20 @@ input, textarea { font-family: inherit; font-size: 16px; }
 .scanner-hint--err { background: rgba(178,28,20,.85); }
 .camera-off { width: 100%; margin-top: 8px; }
 
+/* ---------- Pending (confirmar lectura) ---------- */
+.pending-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin-top: 10px; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: var(--gray-bg);
+}
+.pending-bar--recepcion { border-color: var(--amber); background: var(--amber-bg); }
+.pending-bar--entrega { border-color: var(--green); background: var(--green-bg); }
+.pending-bar__info { display: flex; flex-direction: column; min-width: 0; }
+.pending-bar__label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.pending-bar__code { font-size: 22px; font-weight: 800; letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+.pending-bar__actions { display: flex; gap: 8px; }
+.confirm-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; color: var(--ink); }
+.confirm-toggle input { width: 20px; height: 20px; }
+
 /* ---------- Scan flash (tic flotante) ---------- */
 .scan-flash {
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
