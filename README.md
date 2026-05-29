@@ -27,16 +27,28 @@ D1** (SQLite gestionado). Ya están creados:
 - **Worker** `superdelta` (código en `workers/api.js`) con las rutas
   `GET/POST/DELETE /entries`.
 
-### Desplegar el Worker (una sola vez)
+### Desplegar el Worker
 
-El MCP no despliega Workers, así que este paso se hace desde tu terminal:
+**Opción A — automático (GitHub Actions, recomendado).**
+El workflow `.github/workflows/deploy-worker.yml` despliega `superdelta` solo,
+cada vez que cambian `workers/**` o `wrangler.toml` (o a mano desde la pestaña
+**Actions → Deploy Worker superdelta → Run workflow**). Configúralo una vez:
+
+1. Crea un token en Cloudflare: **Dashboard → My Profile → API Tokens →
+   Create Token → plantilla "Edit Cloudflare Workers"**.
+2. Guárdalo como secreto del repo: **Settings → Secrets and variables →
+   Actions → Secrets → New repository secret**, nombre `CLOUDFLARE_API_TOKEN`.
+
+El `account_id` ya está en `wrangler.toml`, así que no hace falta nada más.
+
+**Opción B — manual (desde tu terminal).**
 
 ```bash
 npx wrangler login        # si no lo has hecho
 npx wrangler deploy       # usa wrangler.toml (ya apunta al D1 correcto)
 ```
 
-Wrangler imprime la URL pública del Worker, p. ej.
+En ambos casos la URL pública del Worker queda como
 `https://superdelta.<tu-subdominio>.workers.dev`.
 
 ### Conectar el frontend al backend
