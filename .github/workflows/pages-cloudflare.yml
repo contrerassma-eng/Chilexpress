@@ -46,6 +46,12 @@ jobs:
           VITE_BASE: /
           # La URL del Worker ya esta horneada como default en src/lib/backend.js,
           # asi que no hace falta nada mas aqui.
+      - name: Crear proyecto Pages si no existe
+        uses: cloudflare/wrangler-action@v3
+        continue-on-error: true
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages project create superdelta-app --production-branch=main
       - name: Deploy a Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
