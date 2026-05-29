@@ -64,7 +64,19 @@ export default {
     const path = url.pathname.replace(/\/$/, '') || '/';
 
     try {
-      if (path === '/health') return json({ ok: true });
+      if (path === '/' || path === '/health') {
+        return json({
+          ok: true,
+          service: 'superdelta',
+          descripcion: 'API del comparador de precios de supermercado. Esta es la API, no la app.',
+          endpoints: {
+            'GET /entries?city=': 'precios (opcional: filtrar por ciudad)',
+            'POST /entries': 'agregar precios { items: [...] }',
+            'DELETE /entries/:id': 'borrar un precio',
+            'DELETE /entries': 'borrar todo'
+          }
+        });
+      }
 
       if (path === '/entries' && req.method === 'GET') {
         const city = url.searchParams.get('city');
