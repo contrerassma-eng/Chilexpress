@@ -1,123 +1,60 @@
 import { createContext, useContext, useEffect, useReducer } from 'react';
 import { loadState, saveState } from '../lib/storage.js';
-import { nowIso } from '../lib/format.js';
+import { makeEntry } from '../lib/pricing.js';
+import { normalize } from '../lib/catalog.js';
 
-export const STATUS = {
-  ESPERADO: 'esperado',   // en la lista/manifiesto, aun no llega
-  RECIBIDO: 'recibido',   // llego al local (punto / amarillo)
-  ENTREGADO: 'entregado'  // entregado (destacador verde)
-};
-
+// Estado: lista plana de registros de precio. La comparacion y el ranking se
+// derivan en tiempo de render (ver lib/pricing.js).
 const initialState = {
-  packages: {},   // code -> { code, status, source, arrivedAt, deliveredAt }
-  shift: null,    // { responsable, startedAt }
-  history: []     // [{ responsable, startedAt, closedAt, totals }]
+  entries: [],          // [entry] (ver lib/pricing.js)
+  contributor: null,    // nombre opcional de quien sube (solo informativo)
+  selectedCity: null    // cityKey seleccionada en el filtro
 };
-
-function normalizeCode(code) {
-  return String(code || '').trim();
-}
-
-function ensurePkg(packages, code, source) {
-  if (!packages[code]) {
-    packages[code] = { code, status: STATUS.ESPERADO, source: source || 'scan', arrivedAt: null, deliveredAt: null };
-  }
-  return packages[code];
-}
 
 function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
       return { ...initialState, ...action.payload };
 
-    case 'IMPORT': {
-      const packages = { ...state.packages };
-      for (const raw of action.codes) {
-        const code = normalizeCode(raw);
-        if (!code) continue;
-        if (!packages[code]) {
-          packages[code] = { code, status: STATUS.ESPERADO, source: 'csv', arrivedAt: null, deliveredAt: null };
-        }
-      }
-      return { ...state, packages };
+    case 'SET_CONTRIBUTOR':
+      return { ...state, contributor: action.name || null };
+
+    case 'SELECT_CITY':
+      return { ...state, selectedCity: action.cityKey || null };
+
+    // Agrega uno o varios registros (varios = items de una misma boleta).
+    case 'ADD_ENTRIES': {
+      const entries = action.items
+        .map((it) => makeEntry(it))
+        .filter((e) => e.productKey && e.supermarketKey && e.cityKey && e.price > 0);
+      if (entries.length === 0) return state;
+      // Si subimos por primera vez datos de una ciudad, la dejamos seleccionada.
+      const selectedCity = state.selectedCity || entries[0].cityKey;
+      return { ...state, entries: [...entries, ...state.entries], selectedCity };
     }
 
-    case 'SCAN': {
-      const code = normalizeCode(action.code);
-      if (!code) return state;
-      const at = action.at || nowIso();
-      const packages = { ...state.packages };
-      const prev = packages[code]
-        ? { ...packages[code] }
-        : { code, status: STATUS.ESPERADO, source: 'scan', arrivedAt: null, deliveredAt: null };
-
-      if (action.mode === 'entrega') {
-        prev.status = STATUS.ENTREGADO;
-        prev.deliveredAt = at;
-        if (!prev.arrivedAt) prev.arrivedAt = at;
-      } else {
-        // recepcion
-        if (prev.status === STATUS.ESPERADO || !packages[code]) {
-          prev.status = STATUS.RECIBIDO;
-        }
-        if (!prev.arrivedAt) prev.arrivedAt = at;
-      }
-      packages[code] = prev;
-      return { ...state, packages };
+    case 'UPDATE_ENTRY': {
+      const { id, patch } = action;
+      return {
+        ...state,
+        entries: state.entries.map((e) => {
+          if (e.id !== id) return e;
+          const merged = { ...e, ...patch, updatedAt: new Date().toISOString() };
+          // Reconstruye las claves derivadas si cambio el texto.
+          if (patch.product !== undefined) merged.productKey = normalize(merged.product);
+          if (patch.supermarket !== undefined) merged.supermarketKey = normalize(merged.supermarket);
+          if (patch.city !== undefined) merged.cityKey = normalize(merged.city);
+          if (patch.price !== undefined) merged.price = Number(merged.price) || 0;
+          return merged;
+        })
+      };
     }
 
-    case 'SET_STATUS': {
-      const code = normalizeCode(action.code);
-      const pkg = state.packages[code];
-      if (!pkg) return state;
-      const at = nowIso();
-      const next = { ...pkg, status: action.status };
-      if (action.status === STATUS.ENTREGADO) {
-        next.deliveredAt = at;
-        if (!next.arrivedAt) next.arrivedAt = at;
-      } else if (action.status === STATUS.RECIBIDO) {
-        if (!next.arrivedAt) next.arrivedAt = at;
-        next.deliveredAt = null;
-      } else {
-        next.arrivedAt = null;
-        next.deliveredAt = null;
-      }
-      return { ...state, packages: { ...state.packages, [code]: next } };
-    }
-
-    case 'REMOVE': {
-      const packages = { ...state.packages };
-      delete packages[normalizeCode(action.code)];
-      return { ...state, packages };
-    }
-
-    case 'CLEAR_DELIVERED': {
-      const packages = {};
-      for (const p of Object.values(state.packages)) {
-        if (p.status !== STATUS.ENTREGADO) packages[p.code] = p;
-      }
-      return { ...state, packages };
-    }
+    case 'REMOVE_ENTRY':
+      return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
 
     case 'CLEAR_ALL':
-      return { ...state, packages: {} };
-
-    case 'START_SHIFT':
-      return { ...state, shift: { responsable: action.responsable, startedAt: nowIso() } };
-
-    case 'CLOSE_SHIFT': {
-      const closed = {
-        id: state.shift?.startedAt || nowIso(),
-        responsable: state.shift?.responsable || '-',
-        startedAt: state.shift?.startedAt || null,
-        closedAt: nowIso(),
-        totals: action.totals,
-        packages: Object.values(state.packages),
-        signature: action.signature || null
-      };
-      // Limpia la pantalla para el proximo turno y archiva el turno cerrado.
-      return { ...state, shift: null, packages: {}, history: [closed, ...state.history].slice(0, 30) };
-    }
+      return { ...state, entries: [] };
 
     default:
       return state;

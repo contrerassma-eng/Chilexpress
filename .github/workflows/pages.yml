@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - claude/chile-express-barcode-app-VBpfK
+      - claude/supermarket-price-comparison-X4wya
   workflow_dispatch:
 
 permissions:
