@@ -1,6 +1,6 @@
 # API del comparador de precios (Cloudflare Worker + D1).
 # El binding y el database_id ya apuntan a la base "precios-super" creada para este proyecto.
-name = "precios-super-api"
+name = "superdelta"
 main = "workers/api.js"
 compatibility_date = "2024-11-01"
 account_id = "3e62b9fbc9cf3a2f7fcde7f0fbb7adb1"

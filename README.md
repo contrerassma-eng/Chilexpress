@@ -24,7 +24,7 @@ D1** (SQLite gestionado). Ya están creados:
 
 - **D1** `precios-super` (`database_id` en `wrangler.toml`) con la tabla
   `entries` ya migrada.
-- **Worker** `precios-super-api` (código en `workers/api.js`) con las rutas
+- **Worker** `superdelta` (código en `workers/api.js`) con las rutas
   `GET/POST/DELETE /entries`.
 
 ### Desplegar el Worker (una sola vez)
@@ -37,7 +37,7 @@ npx wrangler deploy       # usa wrangler.toml (ya apunta al D1 correcto)
 ```
 
 Wrangler imprime la URL pública del Worker, p. ej.
-`https://precios-super-api.<tu-subdominio>.workers.dev`.
+`https://superdelta.<tu-subdominio>.workers.dev`.
 
 ### Conectar el frontend al backend
 
@@ -45,7 +45,7 @@ Define la URL del Worker como variable de entorno de build:
 
 ```bash
 # local
-echo "VITE_API_BASE=https://precios-super-api.<tu-subdominio>.workers.dev" > .env.local
+echo "VITE_API_BASE=https://superdelta.<tu-subdominio>.workers.dev" > .env.local
 
 # en GitHub Actions (deploy a Pages): agrégala como variable/secreto del repo
 # y pásala en el step de build (env: VITE_API_BASE: ...).
