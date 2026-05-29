@@ -42,3 +42,7 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Explicito: 'deploy' promueve la version a la deployment activa
+          # (sin esto, segun la version de la accion, podria solo subir la
+          # version sin servir el codigo nuevo).
+          command: deploy

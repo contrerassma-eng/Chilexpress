@@ -1,5 +1,5 @@
-// Capa de datos: usa el backend remoto (Cloudflare Worker) si esta configurado
-// VITE_API_BASE; si no, cae a almacenamiento local (offline, por dispositivo).
+// Capa de datos: usa el backend remoto (Cloudflare Worker) si hay una URL de
+// API; si no, cae a almacenamiento local (offline, por dispositivo).
 //
 // Es el UNICO punto que conoce de donde vienen/van los datos. Tanto en modo
 // remoto como local, las funciones devuelven entries con la misma forma
@@ -8,7 +8,11 @@
 import { loadState, saveState } from './storage.js';
 import { makeEntry } from './pricing.js';
 
-const BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+// URL del Worker de produccion (superdelta). Se puede sobre-escribir con la
+// variable de build VITE_API_BASE (p. ej. para apuntar a un Worker de staging).
+const DEFAULT_API = 'https://superdelta.contreras-sma.workers.dev';
+
+const BASE = (import.meta.env.VITE_API_BASE || DEFAULT_API || '').replace(/\/$/, '');
 export const REMOTE = !!BASE;
 
 async function jfetch(path, opts = {}) {
