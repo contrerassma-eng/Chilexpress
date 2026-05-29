@@ -13,7 +13,7 @@ import ProductCard from './components/ProductCard.jsx';
 import AddPriceModal from './components/AddPriceModal.jsx';
 
 export default function App() {
-  const { state, dispatch } = useStore();
+  const { state, remote, addEntries, removeEntry, clearAll, selectCity } = useStore();
   const [showAdd, setShowAdd] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState('ranking'); // 'ranking' | 'todos'
@@ -45,9 +45,21 @@ export default function App() {
     return base.filter((c) => c.product && normalize(c.product).includes(q));
   }, [view, ranking, comparisons, query]);
 
-  function handleSave(items) {
-    dispatch({ type: 'ADD_ENTRIES', items });
+  async function handleSave(items) {
+    await addEntries(items);
     setShowAdd(false);
+  }
+
+  if (state.loading) {
+    return (
+      <div className="start-shift">
+        <div className="start-card">
+          <img src={ICON_DATA_URI} alt="" width="64" height="64" />
+          <h1>Precios de Supermercado</h1>
+          <p className="muted">Cargando precios…</p>
+        </div>
+      </div>
+    );
   }
 
   // Primera vez: sin datos -> pantalla de bienvenida.
@@ -61,6 +73,9 @@ export default function App() {
             Compara precios entre supermercados de tu ciudad. Sube la foto de tu
             boleta y registra los precios para empezar.
           </p>
+          {state.error && (
+            <p className="err-msg">No se pudo conectar al servidor. Revisa tu conexion.</p>
+          )}
           <button className="btn btn--primary btn--big" onClick={() => setShowAdd(true)}>
             Subir mi primera boleta
           </button>
@@ -77,7 +92,7 @@ export default function App() {
       <header className="topbar">
         <div className="topbar__info">
           <strong>Precios de Supermercado</strong>
-          <span className="muted">Comparador por ciudad</span>
+          <span className="muted">{remote ? 'Comparador compartido por ciudad' : 'Comparador por ciudad (local)'}</span>
         </div>
         <div className="topbar__actions">
           <button className="btn btn--sm" onClick={() => setShowAdd(true)}>+ Boleta</button>
@@ -86,7 +101,7 @@ export default function App() {
             <div className="menu" onClick={() => setMenuOpen(false)}>
               <button
                 className="danger"
-                onClick={() => { if (confirm('Borrar TODOS los precios guardados?')) dispatch({ type: 'CLEAR_ALL' }); }}
+                onClick={() => { if (confirm('Borrar TODOS los precios guardados?')) clearAll(); }}
               >
                 Borrar todos los datos
               </button>
@@ -99,7 +114,7 @@ export default function App() {
         <CityBar
           cities={cities}
           selectedCity={activeCity}
-          onSelect={(k) => dispatch({ type: 'SELECT_CITY', cityKey: k })}
+          onSelect={selectCity}
           lastUpdated={lastUpdated}
         />
 
@@ -143,7 +158,7 @@ export default function App() {
                 key={comp.key}
                 comp={comp}
                 rank={view === 'ranking' ? i + 1 : null}
-                onRemoveEntry={(id) => dispatch({ type: 'REMOVE_ENTRY', id })}
+                onRemoveEntry={removeEntry}
               />
             ))}
           </ul>

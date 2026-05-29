@@ -14,6 +14,7 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [items, setItems] = useState([emptyItem()]);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   async function onPhoto(e) {
     const file = e.target.files?.[0];
@@ -40,7 +41,7 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
     setItems((list) => (list.length === 1 ? list : list.filter((_, idx) => idx !== i)));
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     setError('');
     if (!city.trim()) return setError('Indica la ciudad.');
@@ -56,7 +57,13 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
       }))
       .filter((it) => it.product && it.price > 0);
     if (valid.length === 0) return setError('Agrega al menos un producto con precio.');
-    onSave(valid);
+    setSaving(true);
+    try {
+      await onSave(valid);
+    } catch {
+      setError('No se pudieron guardar los precios. Revisa tu conexion e intenta de nuevo.');
+      setSaving(false);
+    }
   }
 
   return (
@@ -150,11 +157,11 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
           {error && <p className="err-msg">{error}</p>}
 
           <div className="import-foot">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>
+            <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn--primary">
-              Guardar precios
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? 'Guardando…' : 'Guardar precios'}
             </button>
           </div>
         </form>

@@ -30,6 +30,10 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /Chilexpress/
+          # URL del Worker de Cloudflare. Configurala en
+          # Settings > Secrets and variables > Actions > Variables (VITE_API_BASE).
+          # Si queda vacia, la app funciona en modo local por dispositivo.
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true

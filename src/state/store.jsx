@@ -1,53 +1,32 @@
-import { createContext, useContext, useEffect, useReducer } from 'react';
-import { loadState, saveState } from '../lib/storage.js';
-import { makeEntry } from '../lib/pricing.js';
-import { normalize } from '../lib/catalog.js';
+import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import { saveState } from '../lib/storage.js';
+import { backend, REMOTE } from '../lib/backend.js';
 
 // Estado: lista plana de registros de precio. La comparacion y el ranking se
-// derivan en tiempo de render (ver lib/pricing.js).
+// derivan en tiempo de render (ver lib/pricing.js). El origen de los datos
+// (remoto o local) lo resuelve lib/backend.js.
 const initialState = {
-  entries: [],          // [entry] (ver lib/pricing.js)
-  contributor: null,    // nombre opcional de quien sube (solo informativo)
-  selectedCity: null    // cityKey seleccionada en el filtro
+  entries: [],
+  selectedCity: null,
+  loading: true,
+  error: null
 };
 
 function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
-      return { ...initialState, ...action.payload };
+      return { ...state, entries: action.entries, loading: false, error: null };
 
-    case 'SET_CONTRIBUTOR':
-      return { ...state, contributor: action.name || null };
+    case 'LOAD_ERROR':
+      return { ...state, loading: false, error: action.error };
 
     case 'SELECT_CITY':
       return { ...state, selectedCity: action.cityKey || null };
 
-    // Agrega uno o varios registros (varios = items de una misma boleta).
-    case 'ADD_ENTRIES': {
-      const entries = action.items
-        .map((it) => makeEntry(it))
-        .filter((e) => e.productKey && e.supermarketKey && e.cityKey && e.price > 0);
-      if (entries.length === 0) return state;
-      // Si subimos por primera vez datos de una ciudad, la dejamos seleccionada.
-      const selectedCity = state.selectedCity || entries[0].cityKey;
-      return { ...state, entries: [...entries, ...state.entries], selectedCity };
-    }
-
-    case 'UPDATE_ENTRY': {
-      const { id, patch } = action;
-      return {
-        ...state,
-        entries: state.entries.map((e) => {
-          if (e.id !== id) return e;
-          const merged = { ...e, ...patch, updatedAt: new Date().toISOString() };
-          // Reconstruye las claves derivadas si cambio el texto.
-          if (patch.product !== undefined) merged.productKey = normalize(merged.product);
-          if (patch.supermarket !== undefined) merged.supermarketKey = normalize(merged.supermarket);
-          if (patch.city !== undefined) merged.cityKey = normalize(merged.city);
-          if (patch.price !== undefined) merged.price = Number(merged.price) || 0;
-          return merged;
-        })
-      };
+    case 'PREPEND': {
+      if (!action.entries || action.entries.length === 0) return state;
+      const selectedCity = state.selectedCity || action.entries[0].cityKey;
+      return { ...state, entries: [...action.entries, ...state.entries], selectedCity };
     }
 
     case 'REMOVE_ENTRY':
@@ -64,20 +43,46 @@ function reducer(state, action) {
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
-    const loaded = loadState();
-    return loaded ? { ...init, ...loaded } : init;
-  });
+  const [state, dispatch] = useReducer(reducer, initialState);
 
+  // Carga inicial desde el backend (remoto o local).
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let alive = true;
+    backend
+      .list()
+      .then((entries) => { if (alive) dispatch({ type: 'HYDRATE', entries }); })
+      .catch((err) => { if (alive) dispatch({ type: 'LOAD_ERROR', error: String(err.message || err) }); });
+    return () => { alive = false; };
+  }, []);
 
-  return (
-    <StoreContext.Provider value={{ state, dispatch }}>
-      {children}
-    </StoreContext.Provider>
-  );
+  // En modo local, persistimos cada cambio en el dispositivo. En remoto, la
+  // fuente de verdad es el Worker; igual cacheamos para arranque offline.
+  useEffect(() => {
+    if (!state.loading) saveState({ entries: state.entries });
+  }, [state.entries, state.loading]);
+
+  const actions = useMemo(() => ({
+    async addEntries(items) {
+      const created = await backend.add(items);
+      dispatch({ type: 'PREPEND', entries: created });
+      return created;
+    },
+    removeEntry(id) {
+      dispatch({ type: 'REMOVE_ENTRY', id });
+      backend.remove(id).catch(() => {});
+    },
+    clearAll() {
+      dispatch({ type: 'CLEAR_ALL' });
+      backend.clear().catch(() => {});
+    },
+    selectCity(cityKey) {
+      dispatch({ type: 'SELECT_CITY', cityKey });
+    }
+  }), []);
+
+  const value = useMemo(() => ({ state, remote: REMOTE, ...actions }), [state, actions]);
+
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
 export function useStore() {

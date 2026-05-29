@@ -17,17 +17,56 @@ que suben los usuarios.
 - **Ranking de mayores diferencias**: ordena los productos por el mayor ahorro
   potencial (diferencia entre el supermercado más caro y el más barato).
 
-## Estado actual y próximos pasos
+## Backend compartido (Cloudflare)
 
-Según lo acordado, esta primera versión es:
+La comparación real entre usuarios usa un **Cloudflare Worker + base de datos
+D1** (SQLite gestionado). Ya están creados:
 
-1. **Almacenamiento local** (`localStorage`): cada dispositivo guarda sus
-   propios datos. La capa de persistencia está aislada en `src/lib/storage.js`,
-   que es el único punto a cambiar cuando se migre a un backend compartido
-   (p. ej. Supabase) para tener comparación real entre usuarios.
-2. **Carga manual** de los precios. La pantalla de subida ya contempla la foto
-   de la boleta; el **procesamiento con IA** (leer la boleta y extraer
-   producto + precio automáticamente) se integrará en una segunda etapa.
+- **D1** `precios-super` (`database_id` en `wrangler.toml`) con la tabla
+  `entries` ya migrada.
+- **Worker** `precios-super-api` (código en `workers/api.js`) con las rutas
+  `GET/POST/DELETE /entries`.
+
+### Desplegar el Worker (una sola vez)
+
+El MCP no despliega Workers, así que este paso se hace desde tu terminal:
+
+```bash
+npx wrangler login        # si no lo has hecho
+npx wrangler deploy       # usa wrangler.toml (ya apunta al D1 correcto)
+```
+
+Wrangler imprime la URL pública del Worker, p. ej.
+`https://precios-super-api.<tu-subdominio>.workers.dev`.
+
+### Conectar el frontend al backend
+
+Define la URL del Worker como variable de entorno de build:
+
+```bash
+# local
+echo "VITE_API_BASE=https://precios-super-api.<tu-subdominio>.workers.dev" > .env.local
+
+# en GitHub Actions (deploy a Pages): agrégala como variable/secreto del repo
+# y pásala en el step de build (env: VITE_API_BASE: ...).
+```
+
+Si `VITE_API_BASE` **no** está definida, la app cae automáticamente a
+**modo local** (`localStorage`, por dispositivo) — útil para desarrollo y como
+fallback offline. La cabecera de la app indica si está en modo compartido o
+local.
+
+> Las fotos de boleta se guardan comprimidas dentro de D1 (suficiente para el
+> piloto). Para volumen alto conviene mover las imágenes a **R2** (hay que
+> habilitarlo una vez desde el dashboard de Cloudflare); la migración solo toca
+> `workers/api.js`.
+
+## Procesamiento con IA (próxima etapa)
+
+Pendiente, según lo acordado: una ruta en el Worker que reciba la foto, llame a
+la **API de visión de Claude** y devuelva los ítems (producto + precio +
+supermercado) prellenados para que el usuario confirme antes de guardar. La
+pantalla de subida ya contempla la foto, así que el enganche es directo.
 
 ## Estructura
 
@@ -37,15 +76,19 @@ src/
   state/store.jsx         Estado (reducer) + persistencia local
   lib/
     pricing.js            Modelo de datos + comparación y ranking
+    backend.js            Capa de datos: remoto (Worker) o local (fallback)
     catalog.js            Ciudades/supermercados sugeridos + normalización
     image.js              Compresión de la foto de boleta a dataURL
     format.js             Formato CLP, fechas y fechas relativas
-    storage.js            Persistencia local (único punto para el backend)
+    storage.js            Caché/persistencia local
     brand.js              Icono embebido
   components/
     AddPriceModal.jsx     Subir boleta + registrar productos
     CityBar.jsx           Filtro de ciudad + sello de última actualización
     ProductCard.jsx       Tarjeta de comparación de un producto
+workers/
+  api.js                  Cloudflare Worker (API REST sobre D1)
+wrangler.toml             Config de despliegue del Worker (binding D1)
 test/
   pricing.test.js         Pruebas de la lógica de comparación
 ```
