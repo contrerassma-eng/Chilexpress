@@ -156,6 +156,13 @@ input, textarea, select { font-family: inherit; font-size: 16px; }
 
 .import-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
 .err-msg { color: var(--brand-dark); font-weight: 600; margin: 12px 0 0; }
+.ok-msg { color: var(--green-dark); font-weight: 600; margin: 8px 0 0; font-size: 14px; }
+
+/* ---------- OCR scan status ---------- */
+.scan-status { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
+.scan-status .muted { font-size: 13px; }
+.scan-bar { height: 8px; background: #e9eef5; border-radius: 999px; overflow: hidden; }
+.scan-bar span { display: block; height: 100%; background: var(--brand); transition: width .2s ease; }
 
 /* ---------- Start / welcome ---------- */
 .start-shift { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; background: linear-gradient(160deg, var(--brand), var(--brand-dark)); }

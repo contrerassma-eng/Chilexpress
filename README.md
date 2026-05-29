@@ -61,12 +61,33 @@ local.
 > habilitarlo una vez desde el dashboard de Cloudflare); la migración solo toca
 > `workers/api.js`.
 
-## Procesamiento con IA (próxima etapa)
+## Lectura de boletas (cámara + OCR, sin IA)
 
-Pendiente, según lo acordado: una ruta en el Worker que reciba la foto, llame a
-la **API de visión de Claude** y devuelva los ítems (producto + precio +
-supermercado) prellenados para que el usuario confirme antes de guardar. La
-pantalla de subida ya contempla la foto, así que el enganche es directo.
+La subida de boleta lee los precios **automáticamente en el dispositivo**, sin
+servicios de IA ni API keys:
+
+1. **Cámara** → el usuario saca la foto de la boleta.
+2. **OCR** (`src/lib/ocr.js`, Tesseract.js en español) → extrae el texto. El
+   motor de OCR se carga de forma diferida (solo al escanear) y el navegador lo
+   cachea para las siguientes veces.
+3. **Parser** (`src/lib/receiptParser.js`) → heurísticas afinadas a boletas
+   chilenas que mapean:
+   - **Supermercado** (cadenas conocidas: Unimarc/Rendic, Jumbo, Líder, etc.)
+   - **Ciudad/comuna** (línea de dirección)
+   - **Fecha** de emisión
+   - **Productos**: líneas `código · descripción · valor`, descartando RUT,
+     totales, neto/IVA y pagos. Maneja precio por kilo (`0,58 x 1 KG $2990 c/u`
+     → unidad `kg`, precio unitario `$2990`) y el formato de pesos chileno
+     (`$1.990` → 1990).
+4. **Confirmación**: los campos quedan prellenados y **editables**; el usuario
+   corrige lo que el OCR no haya leído bien antes de guardar.
+
+El parser es una función pura cubierta por pruebas con el texto de una boleta
+Unimarc real (`test/receiptParser.test.js`).
+
+> Si más adelante se quiere mayor precisión, el mismo punto de enganche
+> (`onPhoto` en `AddPriceModal`) puede llamar a una ruta del Worker con la
+> **API de visión de Claude** en vez del OCR local.
 
 ## Estructura
 
@@ -77,6 +98,8 @@ src/
   lib/
     pricing.js            Modelo de datos + comparación y ranking
     backend.js            Capa de datos: remoto (Worker) o local (fallback)
+    ocr.js                OCR en el dispositivo (Tesseract.js)
+    receiptParser.js      Mapea el texto OCR a supermercado/ciudad/fecha/items
     catalog.js            Ciudades/supermercados sugeridos + normalización
     image.js              Compresión de la foto de boleta a dataURL
     format.js             Formato CLP, fechas y fechas relativas
@@ -91,6 +114,7 @@ workers/
 wrangler.toml             Config de despliegue del Worker (binding D1)
 test/
   pricing.test.js         Pruebas de la lógica de comparación
+  receiptParser.test.js   Pruebas del parser de boletas (boleta real)
 ```
 
 ## Desarrollo

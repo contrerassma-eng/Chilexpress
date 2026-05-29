@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { SUPERMERCADOS, CIUDADES, UNIDADES } from '../lib/catalog.js';
 import { fileToCompressedDataURL } from '../lib/image.js';
+import { ocrImage } from '../lib/ocr.js';
+import { parseReceipt } from '../lib/receiptParser.js';
 
 // Una fila de producto dentro de la boleta.
 function emptyItem() {
@@ -15,19 +17,49 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
   const [items, setItems] = useState([emptyItem()]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Estado del escaneo OCR: idle | reading | done
+  const [scan, setScan] = useState({ status: 'idle', progress: 0, found: 0 });
 
+  // Lee la foto, corre OCR + parser y prellena los campos (todo editable).
   async function onPhoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoBusy(true);
     setError('');
+    setScan({ status: 'idle', progress: 0, found: 0 });
+    let dataUrl = null;
     try {
-      const dataUrl = await fileToCompressedDataURL(file);
+      dataUrl = await fileToCompressedDataURL(file);
       setPhoto(dataUrl);
     } catch {
       setError('No se pudo procesar la foto. Puedes registrar los precios igual.');
-    } finally {
       setPhotoBusy(false);
+      return;
+    }
+    setPhotoBusy(false);
+
+    // Escaneo OCR sobre la imagen ya comprimida.
+    setScan({ status: 'reading', progress: 0, found: 0 });
+    try {
+      const text = await ocrImage(dataUrl, (p) =>
+        setScan((s) => ({ ...s, progress: Math.round(p * 100) }))
+      );
+      const parsed = parseReceipt(text);
+      // Prellenamos solo los campos vacios para no pisar lo que el usuario ya
+      // haya escrito a mano.
+      if (parsed.supermarket && !supermarket.trim()) setSupermarket(parsed.supermarket);
+      if (parsed.city && !city.trim()) setCity(parsed.city);
+      if (parsed.items.length > 0) {
+        setItems(parsed.items.map((it) => ({
+          product: it.product,
+          unit: it.unit || 'un',
+          price: String(it.price || '')
+        })));
+      }
+      setScan({ status: 'done', progress: 100, found: parsed.items.length });
+    } catch {
+      setScan({ status: 'idle', progress: 0, found: 0 });
+      setError('No se pudo leer la boleta automaticamente. Ingresa los precios a mano.');
     }
   }
 
@@ -66,25 +98,46 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
     }
   }
 
+  const scanning = scan.status === 'reading';
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Subir boleta / precios</h2>
         <p className="muted modal-sub">
-          Sube la foto de tu boleta como respaldo y registra los precios. Pronto
-          el procesamiento con IA leera la boleta por ti.
+          Saca una foto de tu boleta: la app la lee y rellena los precios por ti.
+          Revisa y corrige lo que haga falta antes de guardar.
         </p>
 
         <form onSubmit={submit}>
-          {/* Foto de la boleta */}
+          {/* Foto de la boleta + OCR */}
           <label className="file-label">
-            {photoBusy ? 'Procesando foto…' : photo ? 'Cambiar foto de boleta' : '📷 Foto de la boleta (opcional)'}
-            <input type="file" accept="image/*" capture="environment" onChange={onPhoto} />
+            {photoBusy
+              ? 'Procesando foto…'
+              : photo
+                ? '📷 Volver a escanear boleta'
+                : '📷 Escanear boleta con la cámara'}
+            <input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={scanning} />
           </label>
+
+          {scanning && (
+            <div className="scan-status">
+              <div className="scan-bar"><span style={{ width: `${scan.progress}%` }} /></div>
+              <span className="muted">Leyendo boleta… {scan.progress}%</span>
+            </div>
+          )}
+          {scan.status === 'done' && (
+            <p className="ok-msg">
+              {scan.found > 0
+                ? `Leí ${scan.found} ${scan.found === 1 ? 'producto' : 'productos'}. Revisa y corrige si hace falta.`
+                : 'No pude detectar productos automáticamente. Ingrésalos a mano.'}
+            </p>
+          )}
+
           {photo && (
             <div className="boleta-preview">
               <img src={photo} alt="Boleta" />
-              <button type="button" className="btn btn--sm btn--ghost" onClick={() => setPhoto(null)}>
+              <button type="button" className="btn btn--sm btn--ghost" onClick={() => { setPhoto(null); setScan({ status: 'idle', progress: 0, found: 0 }); }}>
                 Quitar foto
               </button>
             </div>
@@ -160,7 +213,7 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
             <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn--primary" disabled={saving}>
+            <button type="submit" className="btn btn--primary" disabled={saving || scanning}>
               {saving ? 'Guardando…' : 'Guardar precios'}
             </button>
           </div>
