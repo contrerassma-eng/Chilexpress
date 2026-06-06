@@ -6,7 +6,7 @@ import { parseReceipt } from '../lib/receiptParser.js';
 
 // Una fila de producto dentro de la boleta.
 function emptyItem() {
-  return { product: '', unit: 'un', price: '' };
+  return { barcode: '', product: '', unit: 'un', price: '' };
 }
 
 export default function AddPriceModal({ defaultCity, onClose, onSave }) {
@@ -51,6 +51,7 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
       if (parsed.city && !city.trim()) setCity(parsed.city);
       if (parsed.items.length > 0) {
         setItems(parsed.items.map((it) => ({
+          barcode: it.barcode || '',
           product: it.product,
           unit: it.unit || 'un',
           price: String(it.price || '')
@@ -80,6 +81,7 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
     if (!supermarket.trim()) return setError('Indica el supermercado.');
     const valid = items
       .map((it) => ({
+        barcode: String(it.barcode || '').replace(/\D/g, ''),
         product: it.product.trim(),
         unit: it.unit.trim(),
         price: Number(String(it.price).replace(/[^\d]/g, '')),
@@ -170,36 +172,45 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
           <label className="field-label">Productos</label>
           <div className="items">
             {items.map((it, i) => (
-              <div className="item-row" key={i}>
+              <div className="item-block" key={i}>
+                <div className="item-row">
+                  <input
+                    className="item-prod"
+                    value={it.product}
+                    onChange={(e) => setItem(i, { product: e.target.value })}
+                    placeholder="Producto (ej: Leche entera 1L)"
+                  />
+                  <input
+                    className="item-unit"
+                    list="unidades"
+                    value={it.unit}
+                    onChange={(e) => setItem(i, { unit: e.target.value })}
+                    placeholder="un"
+                  />
+                  <input
+                    className="item-price"
+                    inputMode="numeric"
+                    value={it.price}
+                    onChange={(e) => setItem(i, { price: e.target.value })}
+                    placeholder="$"
+                  />
+                  <button
+                    type="button"
+                    className="item-del"
+                    onClick={() => removeRow(i)}
+                    aria-label="Quitar producto"
+                    disabled={items.length === 1}
+                  >
+                    ✕
+                  </button>
+                </div>
                 <input
-                  className="item-prod"
-                  value={it.product}
-                  onChange={(e) => setItem(i, { product: e.target.value })}
-                  placeholder="Producto (ej: Leche entera 1L)"
-                />
-                <input
-                  className="item-unit"
-                  list="unidades"
-                  value={it.unit}
-                  onChange={(e) => setItem(i, { unit: e.target.value })}
-                  placeholder="un"
-                />
-                <input
-                  className="item-price"
+                  className="item-barcode"
                   inputMode="numeric"
-                  value={it.price}
-                  onChange={(e) => setItem(i, { price: e.target.value })}
-                  placeholder="$"
+                  value={it.barcode}
+                  onChange={(e) => setItem(i, { barcode: e.target.value })}
+                  placeholder="⠿ Código de barra (opcional, mejora la comparación)"
                 />
-                <button
-                  type="button"
-                  className="item-del"
-                  onClick={() => removeRow(i)}
-                  aria-label="Quitar producto"
-                  disabled={items.length === 1}
-                >
-                  ✕
-                </button>
               </div>
             ))}
           </div>

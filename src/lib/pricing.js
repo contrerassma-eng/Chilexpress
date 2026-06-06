@@ -1,24 +1,35 @@
 // Logica de comparacion de precios.
 //
 // Modelo de un registro (entry):
-//   { id, product, productKey, unit, supermarket, supermarketKey,
+//   { id, barcode, product, productKey, unit, supermarket, supermarketKey,
 //     city, cityKey, price (number, CLP), photo (dataURL|null),
 //     createdAt, updatedAt }
 //
 // Reglas:
 // - Para cada producto, en cada supermercado, vale el precio con la fecha de
 //   actualizacion MAS reciente (el ultimo dato que subio alguien).
-// - Un "grupo de comparacion" junta el mismo producto (mismo productKey y misma
-//   unidad) dentro de una ciudad, con el precio vigente de cada supermercado.
+// - Un "grupo de comparacion" junta el mismo producto dentro de una ciudad,
+//   con el precio vigente de cada supermercado. El criterio de "mismo producto"
+//   es el CODIGO DE BARRA (EAN) si existe -- asi un Jumbo y un Lider comparan el
+//   mismo producto aunque cada boleta escriba el nombre distinto. Si no hay
+//   codigo, cae a nombre + unidad.
 // - El ranking ordena los grupos por la mayor diferencia entre el supermercado
 //   mas caro y el mas barato (ahorro potencial).
 
 import { normalize } from './catalog.js';
 
-export function makeEntry({ product, unit, supermarket, city, price, photo }) {
+// Deja solo digitos del codigo de barra (EAN/UPC). '' si no hay codigo valido.
+export function normalizeBarcode(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  // EAN-8/12/13/14 tienen 8..14 digitos; ignoramos basura mas corta/larga.
+  return digits.length >= 8 && digits.length <= 14 ? digits : '';
+}
+
+export function makeEntry({ barcode, product, unit, supermarket, city, price, photo }) {
   const now = new Date().toISOString();
   return {
     id: (crypto?.randomUUID?.() || `e_${Date.now()}_${Math.random().toString(36).slice(2)}`),
+    barcode: normalizeBarcode(barcode),
     product: String(product || '').trim(),
     productKey: normalize(product),
     unit: String(unit || '').trim(),
@@ -33,8 +44,12 @@ export function makeEntry({ product, unit, supermarket, city, price, photo }) {
   };
 }
 
-// Clave que identifica "el mismo producto comparable" (producto + unidad).
+// Clave que identifica "el mismo producto comparable":
+//   - si hay codigo de barra -> "ean:<codigo>" (match exacto entre supermercados)
+//   - si no -> nombre + unidad (como fallback)
 function groupKey(entry) {
+  const bc = normalizeBarcode(entry.barcode);
+  if (bc) return `ean:${bc}`;
   return entry.unit ? `${entry.productKey}|${entry.unit.toLowerCase()}` : entry.productKey;
 }
 
@@ -63,7 +78,7 @@ export function buildComparisons(entries) {
     const gk = groupKey(e);
     let g = groups.get(gk);
     if (!g) {
-      g = { key: gk, product: e.product, unit: e.unit, bySuper: new Map() };
+      g = { key: gk, barcode: normalizeBarcode(e.barcode), product: e.product, unit: e.unit, bySuper: new Map() };
       groups.set(gk, g);
     }
     // Nos quedamos con el registro mas reciente por supermercado.
@@ -79,6 +94,7 @@ export function buildComparisons(entries) {
       .map((e) => ({
         supermarket: e.supermarket,
         supermarketKey: e.supermarketKey,
+        product: e.product,
         price: e.price,
         updatedAt: e.updatedAt,
         photo: e.photo,
@@ -95,6 +111,7 @@ export function buildComparisons(entries) {
 
     result.push({
       key: g.key,
+      barcode: g.barcode,
       product: g.product,
       unit: g.unit,
       prices,

@@ -69,6 +69,30 @@ test('extrae los 3 productos y descarta totales/encabezado', () => {
   assert.equal(bollo.price, 2990);
 });
 
+test('extrae el codigo de barra al inicio de la linea (estilo Unimarc)', () => {
+  const r = parseReceipt(SAMPLE);
+  const [nectar, chis] = r.items;
+  assert.equal(nectar.barcode, '7801620011611');
+  assert.equal(chis.barcode, '7802000014574');
+  // El codigo no debe quedar dentro del nombre del producto.
+  assert.doesNotMatch(nectar.product, /7801620011611/);
+});
+
+test('extrae el codigo de barra en linea aparte (estilo Lider "CODIGO:")', () => {
+  const lider = `SUC: CARMEN
+CURICO
+Fecha: 05/06/2026
+CODIGO: 7802920777542
+LECHE L/VIDA                $1170
+CODIGO: 7803499000093
+TORTA CUCHUF                $9590`;
+  const r = parseReceipt(lider);
+  assert.equal(r.city, 'Curico');
+  const leche = r.items.find((i) => /LECHE/.test(i.product));
+  assert.ok(leche, 'debe encontrar la leche');
+  assert.equal(leche.barcode, '7802920777542');
+});
+
 test('no confunde TOTAL/NETO/IVA con productos', () => {
   const r = parseReceipt(SAMPLE);
   const texts = r.items.map((i) => i.product.toUpperCase()).join(' | ');

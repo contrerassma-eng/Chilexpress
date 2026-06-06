@@ -104,6 +104,8 @@ input, textarea, select { font-family: inherit; font-size: 16px; }
 .pcard__title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .pcard__title strong { font-size: 15px; }
 .pcard__title .muted { font-size: 12px; }
+.pcard__ean { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.prow__alias { color: var(--muted); font-weight: 400; }
 .pcard__diff { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
 .pcard__diff-amount { font-size: 17px; font-weight: 800; color: var(--brand-dark); font-variant-numeric: tabular-nums; }
 .pcard__diff-pct { font-size: 12px; font-weight: 700; color: var(--amber-dark); }
@@ -148,9 +150,11 @@ input, textarea, select { font-family: inherit; font-size: 16px; }
 .field-label { display: block; font-weight: 600; margin: 8px 0 6px; font-size: 14px; }
 .modal input, .modal select { width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 10px; }
 
-.items { display: flex; flex-direction: column; gap: 8px; }
+.items { display: flex; flex-direction: column; gap: 12px; }
+.item-block { display: flex; flex-direction: column; gap: 5px; }
 .item-row { display: grid; grid-template-columns: 1fr 64px 84px 34px; gap: 6px; align-items: center; }
 .item-row input { padding: 10px 8px; }
+.item-barcode { padding: 8px 10px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; font-variant-numeric: tabular-nums; color: var(--muted); }
 .item-del { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 0; color: var(--brand-dark); font-weight: 700; }
 .add-row { margin-top: 10px; width: 100%; border-style: dashed; }
 

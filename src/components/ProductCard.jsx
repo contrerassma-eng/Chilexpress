@@ -16,6 +16,7 @@ export default function ProductCard({ comp, rank, onRemoveEntry }) {
           <span className="muted">
             {comp.unit ? `por ${comp.unit} · ` : ''}{comp.count} {comp.count === 1 ? 'supermercado' : 'supermercados'}
           </span>
+          {comp.barcode && <span className="pcard__ean">⠿ {comp.barcode}</span>}
         </div>
         <div className="pcard__diff">
           {hasDiff ? (
@@ -41,7 +42,12 @@ export default function ProductCard({ comp, rank, onRemoveEntry }) {
         <ul className="pcard__rows">
           {comp.prices.map((p, i) => (
             <li key={p.id} className={i === 0 ? 'prow prow--best' : 'prow'}>
-              <span className="prow__store">{p.supermarket}</span>
+              <span className="prow__store">
+                {p.supermarket}
+                {comp.barcode && p.product && p.product !== comp.product && (
+                  <small className="prow__alias"> · {p.product}</small>
+                )}
+              </span>
               <span className="prow__price">{fmtCLP(p.price)}</span>
               {i !== 0 && comp.min > 0 && (
                 <span className="prow__delta">+{fmtCLP(p.price - comp.min)}</span>

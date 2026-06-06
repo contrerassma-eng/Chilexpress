@@ -31,7 +31,9 @@ const PLACES = [
   'Nunoa', 'Vitacura', 'San Miguel', 'Penalolen', 'La Reina', 'Macul',
   'Vina del Mar', 'Valparaiso', 'Concepcion', 'La Serena', 'Coquimbo',
   'Antofagasta', 'Temuco', 'Rancagua', 'Talca', 'Iquique', 'Puerto Montt',
-  'Arica', 'Chillan', 'Calama', 'Osorno', 'Quilpue', 'Rancagua'
+  'Arica', 'Chillan', 'Calama', 'Osorno', 'Quilpue', 'Curico', 'Linares',
+  'Los Angeles', 'Valdivia', 'Punta Arenas', 'Copiapo', 'Ovalle', 'San Fernando',
+  'Melipilla', 'Buin', 'Colina', 'Quillota', 'San Antonio', 'Cauquenes'
 ];
 
 // Palabras que delatan lineas que NO son producto (encabezado, totales, etc.).
@@ -85,6 +87,20 @@ export function detectDate(text) {
   return Number.isNaN(dt.getTime()) ? '' : iso;
 }
 
+// Extrae un codigo de barra (EAN/UPC, 8..14 digitos) del inicio de la linea,
+// si lo hay. Devuelve { barcode, rest } donde rest es la linea sin el codigo.
+function extractLeadingBarcode(text) {
+  const m = String(text).match(/^\s*(\d{8,14})\b\s*/);
+  if (m) return { barcode: m[1], rest: text.slice(m[0].length) };
+  return { barcode: '', rest: text };
+}
+
+// Detecta una linea "CODIGO: 7802920777542" (estilo Lider) -> el EAN.
+function parseCodigoLine(line) {
+  const m = String(line).match(/c[oó]digo\s*:?\s*(\d{8,14})\b/i);
+  return m ? m[1] : '';
+}
+
 // Limpia la descripcion de un producto: quita codigo de barra inicial, recorta
 // y normaliza espacios. Mantiene el texto tal cual lo imprime la boleta.
 function cleanDescription(desc) {
@@ -115,22 +131,25 @@ function parseItemLine(line) {
   // Las lineas de "cant x unidad precio" son modificadores, no productos.
   if (parseQtyLine(trimmed)) return null;
 
+  // Codigo de barra al inicio de la linea (estilo Unimarc: "7801... NECTAR ...").
+  const { barcode, rest } = extractLeadingBarcode(trimmed);
+
   // El valor es el ultimo monto con $ o el ultimo numero "grande" de la linea.
-  const moneyMatches = [...trimmed.matchAll(/\$?\s*(\d[\d.,]*\d|\d)\b/g)];
+  const moneyMatches = [...rest.matchAll(/\$?\s*(\d[\d.,]*\d|\d)\b/g)];
   if (moneyMatches.length === 0) return null;
   const last = moneyMatches[moneyMatches.length - 1];
   const price = parseCLP(last[1]);
   if (!price || price < 50) return null; // precios reales de super >= ~$50
 
   // La descripcion es lo que va antes del valor final.
-  let desc = trimmed.slice(0, last.index).trim();
+  let desc = rest.slice(0, last.index).trim();
   desc = cleanDescription(desc);
 
   // Necesitamos al menos algunas letras para considerarlo producto.
   const letters = (desc.match(/[a-zA-ZñÑáéíóúÁÉÍÓÚ]/g) || []).length;
   if (letters < 3) return null;
 
-  return { product: desc, unit: 'un', price };
+  return { barcode, product: desc, unit: 'un', price };
 }
 
 export function parseReceipt(rawText) {
@@ -152,6 +171,13 @@ export function parseReceipt(rawText) {
     if (qty) {
       if (qty.unit) item.unit = qty.unit;
       if (qty.unitPrice) item.price = qty.unitPrice;
+    }
+    // Codigo de barra en linea aparte (estilo Lider: "CODIGO: 7802920777542").
+    // Suele ir en la linea anterior o la siguiente; tomamos la mas cercana.
+    if (!item.barcode) {
+      item.barcode = parseCodigoLine(lines[i - 1] || '')
+        || parseCodigoLine(lines[i + 1] || '')
+        || '';
     }
     items.push(item);
   }

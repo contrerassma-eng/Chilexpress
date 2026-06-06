@@ -38,10 +38,17 @@ function uid() {
   return `e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Deja solo digitos del codigo de barra (EAN/UPC, 8..14). '' si no es valido.
+function normalizeBarcode(code) {
+  const digits = String(code || '').replace(/\D/g, '');
+  return digits.length >= 8 && digits.length <= 14 ? digits : '';
+}
+
 // Fila de D1 (snake_case) -> entry del frontend (camelCase).
 function rowToEntry(r) {
   return {
     id: r.id,
+    barcode: r.barcode || '',
     product: r.product,
     productKey: r.product_key,
     unit: r.unit,
@@ -99,13 +106,14 @@ export default {
         const stmts = [];
         const insert = env.DB.prepare(
           `INSERT INTO entries
-             (id, product, product_key, unit, supermarket, supermarket_key,
+             (id, barcode, product, product_key, unit, supermarket, supermarket_key,
               city, city_key, price, photo_data, contributor, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         );
         for (const it of items) {
           const e = {
             id: uid(),
+            barcode: normalizeBarcode(it.barcode),
             product: String(it.product || '').trim(),
             product_key: normalize(it.product),
             unit: String(it.unit || '').trim(),
@@ -121,7 +129,7 @@ export default {
           };
           if (!e.product_key || !e.supermarket_key || !e.city_key || !e.price) continue;
           stmts.push(insert.bind(
-            e.id, e.product, e.product_key, e.unit, e.supermarket, e.supermarket_key,
+            e.id, e.barcode, e.product, e.product_key, e.unit, e.supermarket, e.supermarket_key,
             e.city, e.city_key, e.price, e.photo_data, e.contributor, e.created_at, e.updated_at
           ));
           created.push(rowToEntry(e));

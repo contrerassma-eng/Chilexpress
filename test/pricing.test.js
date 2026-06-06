@@ -14,6 +14,31 @@ function entryAt(over, iso) {
   return e;
 }
 
+test('agrupa por codigo de barra aunque el nombre difiera entre supermercados', () => {
+  const entries = [
+    makeEntry({ barcode: '7802920777542', product: 'LECHE L/VIDA', unit: 'un', supermarket: 'Lider', city: 'Curico', price: 1170 }),
+    makeEntry({ barcode: '7802920777542', product: 'Leche Vida Entera 1L', unit: 'un', supermarket: 'Jumbo', city: 'Curico', price: 1390 })
+  ];
+  const comps = buildComparisons(entries);
+  assert.equal(comps.length, 1, 'mismo EAN = un solo grupo, pese a nombres distintos');
+  assert.equal(comps[0].count, 2);
+  assert.equal(comps[0].barcode, '7802920777542');
+  assert.equal(comps[0].diff, 220);
+  // Cada fila conserva el nombre que uso su supermercado.
+  const names = comps[0].prices.map((p) => p.product).sort();
+  assert.deepEqual(names, ['LECHE L/VIDA', 'Leche Vida Entera 1L']);
+});
+
+test('codigo de barra invalido (corto) cae a agrupar por nombre', () => {
+  const entries = [
+    makeEntry({ barcode: '123', product: 'Pan', unit: 'un', supermarket: 'Lider', city: 'Curico', price: 1000 }),
+    makeEntry({ barcode: '', product: 'Pan', unit: 'un', supermarket: 'Jumbo', city: 'Curico', price: 1200 })
+  ];
+  const comps = buildComparisons(entries);
+  assert.equal(comps.length, 1, 'sin EAN valido, agrupa por nombre+unidad');
+  assert.equal(comps[0].count, 2);
+});
+
 test('agrupa el mismo producto y normaliza nombres/acentos', () => {
   const entries = [
     makeEntry({ product: 'Leche Entera 1L', unit: 'un', supermarket: 'Jumbo', city: 'Santiago', price: 1200 }),
