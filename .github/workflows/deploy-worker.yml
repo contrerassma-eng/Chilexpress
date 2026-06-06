@@ -1,0 +1,48 @@
+name: Deploy Worker superdelta a Cloudflare
+
+# Despliega el Worker de la API (workers/api.js, base D1 precios-super)
+# automaticamente al cambiar el Worker o su config. Tambien se puede lanzar
+# a mano desde la pestana Actions (workflow_dispatch).
+#
+# Requisito unico (una sola vez): crear el secreto del repo CLOUDFLARE_API_TOKEN
+#   Settings > Secrets and variables > Actions > Secrets > New repository secret
+#   Nombre:  CLOUDFLARE_API_TOKEN
+#   Valor:   un token de Cloudflare con permiso "Edit Cloudflare Workers"
+#            (Dashboard de Cloudflare > My Profile > API Tokens >
+#             Create Token > plantilla "Edit Cloudflare Workers").
+# El account_id ya esta en wrangler.toml, asi que no hace falta nada mas.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/supermarket-price-comparison-X4wya
+    paths:
+      - 'workers/**'
+      - 'wrangler.toml'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Deploy con Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Explicito: 'deploy' promueve la version a la deployment activa
+          # (sin esto, segun la version de la accion, podria solo subir la
+          # version sin servir el codigo nuevo).
+          command: deploy

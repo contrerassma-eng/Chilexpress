@@ -1,5 +1,6 @@
-// Persistencia local (offline). Sin backend, todo vive en el dispositivo.
-const KEY = 'cx_state_v1';
+// Persistencia local (offline). Por ahora todo vive en el dispositivo; cuando
+// migremos a un backend compartido, este modulo es el unico punto a cambiar.
+const KEY = 'cx_precios_v1';
 
 export function loadState() {
   try {

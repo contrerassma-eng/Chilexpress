@@ -14,9 +14,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Chile Express - Recepcion y Entrega',
-        short_name: 'CX Escaneo',
-        description: 'App local y offline para escanear, recibir y entregar paquetes Chile Express',
+        name: 'Precios de Supermercado',
+        short_name: 'Precios Super',
+        description: 'Compara precios de supermercado por ciudad a partir de tus boletas',
         lang: 'es',
         start_url: base,
         scope: base,

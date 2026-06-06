@@ -1,0 +1,61 @@
+name: Deploy app a Cloudflare Pages
+
+# Construye el frontend y lo publica en Cloudflare Pages (proyecto "superdelta-app").
+# Cloudflare Pages sirve en la raiz del dominio, por eso VITE_BASE=/.
+# Wrangler crea el proyecto automaticamente en el primer deploy.
+#
+# Requisito (una sola vez): el secreto CLOUDFLARE_API_TOKEN del repo debe tener
+# permisos "Cloudflare Pages: Edit" ademas de Workers. Si creaste el token solo
+# con la plantilla "Edit Cloudflare Workers", edítalo y agrega el permiso de
+# Pages (o crea un token nuevo con ambos).
+
+on:
+  push:
+    branches:
+      - main
+      - claude/supermarket-price-comparison-X4wya
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages-cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+        env:
+          VITE_BASE: /
+          # La URL del Worker ya esta horneada como default en src/lib/backend.js,
+          # asi que no hace falta nada mas aqui.
+      - name: Crear proyecto Pages si no existe
+        uses: cloudflare/wrangler-action@v3
+        continue-on-error: true
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 3e62b9fbc9cf3a2f7fcde7f0fbb7adb1
+          command: pages project create superdelta-app --production-branch=main
+      - name: Deploy a Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 3e62b9fbc9cf3a2f7fcde7f0fbb7adb1
+          command: pages deploy dist --project-name=superdelta-app --branch=main --commit-dirty=true

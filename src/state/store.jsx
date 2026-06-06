@@ -1,123 +1,39 @@
-import { createContext, useContext, useEffect, useReducer } from 'react';
-import { loadState, saveState } from '../lib/storage.js';
-import { nowIso } from '../lib/format.js';
+import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import { saveState } from '../lib/storage.js';
+import { backend, REMOTE } from '../lib/backend.js';
 
-export const STATUS = {
-  ESPERADO: 'esperado',   // en la lista/manifiesto, aun no llega
-  RECIBIDO: 'recibido',   // llego al local (punto / amarillo)
-  ENTREGADO: 'entregado'  // entregado (destacador verde)
-};
-
+// Estado: lista plana de registros de precio. La comparacion y el ranking se
+// derivan en tiempo de render (ver lib/pricing.js). El origen de los datos
+// (remoto o local) lo resuelve lib/backend.js.
 const initialState = {
-  packages: {},   // code -> { code, status, source, arrivedAt, deliveredAt }
-  shift: null,    // { responsable, startedAt }
-  history: []     // [{ responsable, startedAt, closedAt, totals }]
+  entries: [],
+  selectedCity: null,
+  loading: true,
+  error: null
 };
-
-function normalizeCode(code) {
-  return String(code || '').trim();
-}
-
-function ensurePkg(packages, code, source) {
-  if (!packages[code]) {
-    packages[code] = { code, status: STATUS.ESPERADO, source: source || 'scan', arrivedAt: null, deliveredAt: null };
-  }
-  return packages[code];
-}
 
 function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
-      return { ...initialState, ...action.payload };
+      return { ...state, entries: action.entries, loading: false, error: null };
 
-    case 'IMPORT': {
-      const packages = { ...state.packages };
-      for (const raw of action.codes) {
-        const code = normalizeCode(raw);
-        if (!code) continue;
-        if (!packages[code]) {
-          packages[code] = { code, status: STATUS.ESPERADO, source: 'csv', arrivedAt: null, deliveredAt: null };
-        }
-      }
-      return { ...state, packages };
+    case 'LOAD_ERROR':
+      return { ...state, loading: false, error: action.error };
+
+    case 'SELECT_CITY':
+      return { ...state, selectedCity: action.cityKey || null };
+
+    case 'PREPEND': {
+      if (!action.entries || action.entries.length === 0) return state;
+      const selectedCity = state.selectedCity || action.entries[0].cityKey;
+      return { ...state, entries: [...action.entries, ...state.entries], selectedCity };
     }
 
-    case 'SCAN': {
-      const code = normalizeCode(action.code);
-      if (!code) return state;
-      const at = action.at || nowIso();
-      const packages = { ...state.packages };
-      const prev = packages[code]
-        ? { ...packages[code] }
-        : { code, status: STATUS.ESPERADO, source: 'scan', arrivedAt: null, deliveredAt: null };
-
-      if (action.mode === 'entrega') {
-        prev.status = STATUS.ENTREGADO;
-        prev.deliveredAt = at;
-        if (!prev.arrivedAt) prev.arrivedAt = at;
-      } else {
-        // recepcion
-        if (prev.status === STATUS.ESPERADO || !packages[code]) {
-          prev.status = STATUS.RECIBIDO;
-        }
-        if (!prev.arrivedAt) prev.arrivedAt = at;
-      }
-      packages[code] = prev;
-      return { ...state, packages };
-    }
-
-    case 'SET_STATUS': {
-      const code = normalizeCode(action.code);
-      const pkg = state.packages[code];
-      if (!pkg) return state;
-      const at = nowIso();
-      const next = { ...pkg, status: action.status };
-      if (action.status === STATUS.ENTREGADO) {
-        next.deliveredAt = at;
-        if (!next.arrivedAt) next.arrivedAt = at;
-      } else if (action.status === STATUS.RECIBIDO) {
-        if (!next.arrivedAt) next.arrivedAt = at;
-        next.deliveredAt = null;
-      } else {
-        next.arrivedAt = null;
-        next.deliveredAt = null;
-      }
-      return { ...state, packages: { ...state.packages, [code]: next } };
-    }
-
-    case 'REMOVE': {
-      const packages = { ...state.packages };
-      delete packages[normalizeCode(action.code)];
-      return { ...state, packages };
-    }
-
-    case 'CLEAR_DELIVERED': {
-      const packages = {};
-      for (const p of Object.values(state.packages)) {
-        if (p.status !== STATUS.ENTREGADO) packages[p.code] = p;
-      }
-      return { ...state, packages };
-    }
+    case 'REMOVE_ENTRY':
+      return { ...state, entries: state.entries.filter((e) => e.id !== action.id) };
 
     case 'CLEAR_ALL':
-      return { ...state, packages: {} };
-
-    case 'START_SHIFT':
-      return { ...state, shift: { responsable: action.responsable, startedAt: nowIso() } };
-
-    case 'CLOSE_SHIFT': {
-      const closed = {
-        id: state.shift?.startedAt || nowIso(),
-        responsable: state.shift?.responsable || '-',
-        startedAt: state.shift?.startedAt || null,
-        closedAt: nowIso(),
-        totals: action.totals,
-        packages: Object.values(state.packages),
-        signature: action.signature || null
-      };
-      // Limpia la pantalla para el proximo turno y archiva el turno cerrado.
-      return { ...state, shift: null, packages: {}, history: [closed, ...state.history].slice(0, 30) };
-    }
+      return { ...state, entries: [] };
 
     default:
       return state;
@@ -127,20 +43,46 @@ function reducer(state, action) {
 const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
-    const loaded = loadState();
-    return loaded ? { ...init, ...loaded } : init;
-  });
+  const [state, dispatch] = useReducer(reducer, initialState);
 
+  // Carga inicial desde el backend (remoto o local).
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let alive = true;
+    backend
+      .list()
+      .then((entries) => { if (alive) dispatch({ type: 'HYDRATE', entries }); })
+      .catch((err) => { if (alive) dispatch({ type: 'LOAD_ERROR', error: String(err.message || err) }); });
+    return () => { alive = false; };
+  }, []);
 
-  return (
-    <StoreContext.Provider value={{ state, dispatch }}>
-      {children}
-    </StoreContext.Provider>
-  );
+  // En modo local, persistimos cada cambio en el dispositivo. En remoto, la
+  // fuente de verdad es el Worker; igual cacheamos para arranque offline.
+  useEffect(() => {
+    if (!state.loading) saveState({ entries: state.entries });
+  }, [state.entries, state.loading]);
+
+  const actions = useMemo(() => ({
+    async addEntries(items) {
+      const created = await backend.add(items);
+      dispatch({ type: 'PREPEND', entries: created });
+      return created;
+    },
+    removeEntry(id) {
+      dispatch({ type: 'REMOVE_ENTRY', id });
+      backend.remove(id).catch(() => {});
+    },
+    clearAll() {
+      dispatch({ type: 'CLEAR_ALL' });
+      backend.clear().catch(() => {});
+    },
+    selectCity(cityKey) {
+      dispatch({ type: 'SELECT_CITY', cityKey });
+    }
+  }), []);
+
+  const value = useMemo(() => ({ state, remote: REMOTE, ...actions }), [state, actions]);
+
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
 export function useStore() {

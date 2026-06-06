@@ -1,98 +1,109 @@
 import { useMemo, useState } from 'react';
-import { useStore, STATUS } from './state/store.jsx';
-import { fmtTime } from './lib/format.js';
-import { computeReport } from './lib/report.js';
-import ScannerPanel from './components/ScannerPanel.jsx';
-import FilterBar from './components/FilterBar.jsx';
-import PackageList from './components/PackageList.jsx';
-import ImportPanel from './components/ImportPanel.jsx';
-import CloseShiftDialog from './components/CloseShiftDialog.jsx';
-import ReportView from './components/ReportView.jsx';
-import HistoryView from './components/HistoryView.jsx';
-import StartShift from './components/StartShift.jsx';
-
-const STATUS_ORDER = { [STATUS.RECIBIDO]: 0, [STATUS.ESPERADO]: 1, [STATUS.ENTREGADO]: 2 };
+import { useStore } from './state/store.jsx';
+import {
+  buildComparisons,
+  rankByDifference,
+  citiesFromEntries,
+  lastUpdatedAt
+} from './lib/pricing.js';
+import { normalize } from './lib/catalog.js';
+import { ICON_DATA_URI } from './lib/brand.js';
+import CityBar from './components/CityBar.jsx';
+import ProductCard from './components/ProductCard.jsx';
+import AddPriceModal from './components/AddPriceModal.jsx';
 
 export default function App() {
-  const { state, dispatch } = useStore();
-  const [mode, setMode] = useState('recepcion');
-  const [filter, setFilter] = useState('todos');
-  const [query, setQuery] = useState('');
-  const [showImport, setShowImport] = useState(false);
-  const [showClose, setShowClose] = useState(false);
+  const { state, remote, addEntries, removeEntry, clearAll, selectCity } = useStore();
+  const [showAdd, setShowAdd] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [report, setReport] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [view, setView] = useState('ranking'); // 'ranking' | 'todos'
+  const [query, setQuery] = useState('');
 
-  function openArchiveReport(shift) {
-    const pkgs = shift.packages || [];
-    const rep = computeReport({
-      packages: pkgs,
-      responsable: shift.responsable,
-      startedAt: shift.startedAt,
-      closedAt: shift.closedAt
-    });
-    const csvState = { packages: Object.fromEntries(pkgs.map((p) => [p.code, p])) };
-    setReport({ report: rep, signature: shift.signature || null, csvState });
+  const cities = useMemo(() => citiesFromEntries(state.entries), [state.entries]);
+
+  // Ciudad activa: la seleccionada si sigue existiendo, si no la primera.
+  const activeCity = useMemo(() => {
+    if (state.selectedCity && cities.some((c) => c.key === state.selectedCity)) {
+      return state.selectedCity;
+    }
+    return cities[0]?.key || null;
+  }, [state.selectedCity, cities]);
+
+  const cityEntries = useMemo(
+    () => state.entries.filter((e) => e.cityKey === activeCity),
+    [state.entries, activeCity]
+  );
+
+  const comparisons = useMemo(() => buildComparisons(cityEntries), [cityEntries]);
+  const ranking = useMemo(() => rankByDifference(comparisons), [comparisons]);
+  const lastUpdated = useMemo(() => lastUpdatedAt(cityEntries), [cityEntries]);
+
+  const list = useMemo(() => {
+    const base = view === 'ranking' ? ranking : [...comparisons].sort((a, b) => b.diff - a.diff);
+    const q = normalize(query);
+    if (!q) return base;
+    return base.filter((c) => c.product && normalize(c.product).includes(q));
+  }, [view, ranking, comparisons, query]);
+
+  async function handleSave(items) {
+    await addEntries(items);
+    setShowAdd(false);
   }
 
-  const all = useMemo(() => Object.values(state.packages), [state.packages]);
-
-  const counts = useMemo(() => {
-    const c = { todos: all.length, [STATUS.ESPERADO]: 0, [STATUS.RECIBIDO]: 0, [STATUS.ENTREGADO]: 0 };
-    for (const p of all) c[p.status] = (c[p.status] || 0) + 1;
-    return c;
-  }, [all]);
-
-  const items = useMemo(() => {
-    const q = query.trim();
-    let list = all;
-    if (filter !== 'todos') list = list.filter((p) => p.status === filter);
-    if (q) list = list.filter((p) => p.code.includes(q));
-    return list.sort((a, b) => {
-      const so = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
-      return so !== 0 ? so : a.code.localeCompare(b.code);
-    });
-  }, [all, filter, query]);
-
-  if (report) {
-    return <ReportView payload={report} onClose={() => setReport(null)} />;
-  }
-
-  if (showHistory) {
+  if (state.loading) {
     return (
-      <HistoryView
-        history={state.history}
-        onClose={() => setShowHistory(false)}
-        onOpenReport={openArchiveReport}
-      />
+      <div className="start-shift">
+        <div className="start-card">
+          <img src={ICON_DATA_URI} alt="" width="64" height="64" />
+          <h1>Precios de Supermercado</h1>
+          <p className="muted">Cargando precios…</p>
+        </div>
+      </div>
     );
   }
 
-  if (!state.shift) {
-    return <StartShift dispatch={dispatch} onShowHistory={() => setShowHistory(true)} />;
+  // Primera vez: sin datos -> pantalla de bienvenida.
+  if (state.entries.length === 0) {
+    return (
+      <div className="start-shift">
+        <div className="start-card">
+          <img src={ICON_DATA_URI} alt="" width="64" height="64" />
+          <h1>Precios de Supermercado</h1>
+          <p className="muted">
+            Compara precios entre supermercados de tu ciudad. Sube la foto de tu
+            boleta y registra los precios para empezar.
+          </p>
+          {state.error && (
+            <p className="err-msg">No se pudo conectar al servidor. Revisa tu conexion.</p>
+          )}
+          <button className="btn btn--primary btn--big" onClick={() => setShowAdd(true)}>
+            Subir mi primera boleta
+          </button>
+        </div>
+        {showAdd && (
+          <AddPriceModal onClose={() => setShowAdd(false)} onSave={handleSave} />
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="topbar__info">
-          <strong>{state.shift.responsable}</strong>
-          <span className="muted">turno desde {fmtTime(state.shift.startedAt)}</span>
+          <strong>Precios de Supermercado</strong>
+          <span className="muted">{remote ? 'Comparador compartido por ciudad' : 'Comparador por ciudad (local)'}</span>
         </div>
         <div className="topbar__actions">
-          <button className="btn btn--sm" onClick={() => setShowImport(true)}>Importar</button>
-          <button className="btn btn--sm btn--danger-soft" onClick={() => setShowClose(true)}>Cerrar turno</button>
+          <button className="btn btn--sm" onClick={() => setShowAdd(true)}>+ Boleta</button>
           <button className="btn btn--sm btn--ghost" aria-label="Menu" onClick={() => setMenuOpen((o) => !o)}>⋮</button>
           {menuOpen && (
             <div className="menu" onClick={() => setMenuOpen(false)}>
-              <button onClick={() => setShowHistory(true)}>Historial de turnos</button>
-              <button onClick={() => dispatch({ type: 'CLEAR_DELIVERED' })}>Quitar entregados de la lista</button>
               <button
                 className="danger"
-                onClick={() => { if (confirm('Vaciar TODA la lista de codigos?')) dispatch({ type: 'CLEAR_ALL' }); }}
+                onClick={() => { if (confirm('Borrar TODOS los precios guardados?')) clearAll(); }}
               >
-                Vaciar lista completa
+                Borrar todos los datos
               </button>
             </div>
           )}
@@ -100,18 +111,65 @@ export default function App() {
       </header>
 
       <main className="content">
-        <ScannerPanel state={state} dispatch={dispatch} mode={mode} setMode={setMode} />
-        <FilterBar filter={filter} setFilter={setFilter} counts={counts} query={query} setQuery={setQuery} />
-        <PackageList items={items} dispatch={dispatch} />
+        <CityBar
+          cities={cities}
+          selectedCity={activeCity}
+          onSelect={selectCity}
+          lastUpdated={lastUpdated}
+        />
+
+        <div className="view-toggle" role="tablist">
+          <button
+            role="tab"
+            aria-selected={view === 'ranking'}
+            className={view === 'ranking' ? 'seg active' : 'seg'}
+            onClick={() => setView('ranking')}
+          >
+            Mayores diferencias
+          </button>
+          <button
+            role="tab"
+            aria-selected={view === 'todos'}
+            className={view === 'todos' ? 'seg active' : 'seg'}
+            onClick={() => setView('todos')}
+          >
+            Todos los productos
+          </button>
+        </div>
+
+        <input
+          className="search"
+          type="search"
+          placeholder="Buscar producto&hellip;"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+
+        {list.length === 0 ? (
+          <p className="empty">
+            {view === 'ranking'
+              ? 'Aun no hay productos con precios en 2 o mas supermercados de esta ciudad. Sube mas boletas para comparar.'
+              : 'No hay productos que coincidan.'}
+          </p>
+        ) : (
+          <ul className="pcard-list">
+            {list.map((comp, i) => (
+              <ProductCard
+                key={comp.key}
+                comp={comp}
+                rank={view === 'ranking' ? i + 1 : null}
+                onRemoveEntry={removeEntry}
+              />
+            ))}
+          </ul>
+        )}
       </main>
 
-      {showImport && <ImportPanel dispatch={dispatch} onClose={() => setShowImport(false)} />}
-      {showClose && (
-        <CloseShiftDialog
-          state={state}
-          dispatch={dispatch}
-          onClose={() => setShowClose(false)}
-          onGenerated={(payload) => setReport(payload)}
+      {showAdd && (
+        <AddPriceModal
+          defaultCity={cities.find((c) => c.key === activeCity)?.name || ''}
+          onClose={() => setShowAdd(false)}
+          onSave={handleSave}
         />
       )}
     </div>
