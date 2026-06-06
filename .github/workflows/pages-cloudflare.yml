@@ -51,9 +51,11 @@ jobs:
         continue-on-error: true
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 3e62b9fbc9cf3a2f7fcde7f0fbb7adb1
           command: pages project create superdelta-app --production-branch=main
       - name: Deploy a Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: pages deploy dist --project-name=superdelta-app --branch=main
+          accountId: 3e62b9fbc9cf3a2f7fcde7f0fbb7adb1
+          command: pages deploy dist --project-name=superdelta-app --branch=main --commit-dirty=true
