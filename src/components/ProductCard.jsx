@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fmtCLP, fmtRelative } from '../lib/format.js';
+import ProductThumb from './ProductThumb.jsx';
 
 // Tarjeta de un grupo de comparacion: un producto con su precio vigente en cada
 // supermercado, el mas barato destacado y el ahorro potencial.
@@ -11,6 +12,7 @@ export default function ProductCard({ comp, rank, onRemoveEntry }) {
     <li className="pcard">
       <button className="pcard__head" onClick={() => setOpen((o) => !o)}>
         {rank != null && <span className="pcard__rank">{rank}</span>}
+        <ProductThumb barcode={comp.barcode} name={comp.product} />
         <div className="pcard__title">
           <strong>{comp.product}</strong>
           <span className="muted">

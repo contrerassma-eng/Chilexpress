@@ -101,6 +101,14 @@ input, textarea, select { font-family: inherit; font-size: 16px; }
   background: var(--brand); color: #fff; font-weight: 800; font-size: 13px;
   display: flex; align-items: center; justify-content: center;
 }
+.pthumb {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 8px;
+  object-fit: contain; background: #fff; border: 1px solid var(--line);
+}
+.pthumb--ph {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gray-bg); color: var(--muted); font-weight: 800; font-size: 18px;
+}
 .pcard__title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .pcard__title strong { font-size: 15px; }
 .pcard__title .muted { font-size: 12px; }
