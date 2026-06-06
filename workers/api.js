@@ -13,7 +13,7 @@
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type'
 };
 
@@ -148,6 +148,39 @@ export default {
       if (path === '/entries' && req.method === 'DELETE') {
         await env.DB.prepare('DELETE FROM entries').run();
         return json({ ok: true });
+      }
+
+      // --- Fotos de producto (compartidas, por codigo de barra) ---
+
+      // GET /photos?codes=ean1,ean2,...  -> { photos: { ean: {photo, name} } }
+      if (path === '/photos' && req.method === 'GET') {
+        const raw = url.searchParams.get('codes') || '';
+        const codes = raw.split(',').map((c) => normalizeBarcode(c)).filter(Boolean);
+        if (codes.length === 0) return json({ photos: {} });
+        const placeholders = codes.map(() => '?').join(',');
+        const { results } = await env.DB
+          .prepare(`SELECT barcode, photo_data, name FROM product_photos WHERE barcode IN (${placeholders})`)
+          .bind(...codes).all();
+        const photos = {};
+        for (const r of results) photos[r.barcode] = { photo: r.photo_data, name: r.name || '' };
+        return json({ photos });
+      }
+
+      // PUT /photos/:barcode  body { photo (dataURL), name?, source? }
+      const pm = path.match(/^\/photos\/(\d{8,14})$/);
+      if (pm && req.method === 'PUT') {
+        const barcode = pm[1];
+        const body = await req.json();
+        const photo = body.photo || null;
+        if (!photo) return json({ error: 'falta photo' }, 400);
+        await env.DB.prepare(
+          `INSERT INTO product_photos (barcode, photo_data, name, source, updated_at)
+           VALUES (?,?,?,?,?)
+           ON CONFLICT(barcode) DO UPDATE SET
+             photo_data=excluded.photo_data, name=excluded.name,
+             source=excluded.source, updated_at=excluded.updated_at`
+        ).bind(barcode, photo, body.name || null, body.source || 'user', new Date().toISOString()).run();
+        return json({ ok: true, barcode });
       }
 
       return json({ error: 'not found' }, 404);

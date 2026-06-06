@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SUPERMERCADOS, CIUDADES, UNIDADES } from '../lib/catalog.js';
 import { fileToCompressedDataURL } from '../lib/image.js';
 import { ocrImage } from '../lib/ocr.js';
 import { parseReceipt } from '../lib/receiptParser.js';
+import { listenScanGun } from '../lib/scanGun.js';
 
 // Una fila de producto dentro de la boleta.
 function emptyItem() {
@@ -19,6 +20,29 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
   // Estado del escaneo OCR: idle | reading | done
   const [scan, setScan] = useState({ status: 'idle', progress: 0, found: 0 });
+  // Ultimo codigo escaneado con pistola (feedback visual).
+  const [lastGun, setLastGun] = useState('');
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  // Escucha la pistola lectora (teclado HID). Al escanear un codigo, lo pone en
+  // la primera fila sin codigo, o crea una fila nueva. Asi puedes escanear
+  // producto tras producto y luego completar precio/nombre.
+  useEffect(() => {
+    const stop = listenScanGun((code) => {
+      const digits = code.replace(/\D/g, '');
+      if (digits.length < 6) return;
+      setItems((list) => {
+        const idx = list.findIndex((it) => !it.barcode);
+        if (idx >= 0) {
+          return list.map((it, i) => (i === idx ? { ...it, barcode: digits } : it));
+        }
+        return [...list, { ...emptyItem(), barcode: digits }];
+      });
+      setLastGun(digits);
+    });
+    return stop;
+  }, []);
 
   // Lee la foto, corre OCR + parser y prellena los campos (todo editable).
   async function onPhoto(e) {
@@ -107,9 +131,15 @@ export default function AddPriceModal({ defaultCity, onClose, onSave }) {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>Subir boleta / precios</h2>
         <p className="muted modal-sub">
-          Saca una foto de tu boleta: la app la lee y rellena los precios por ti.
-          Revisa y corrige lo que haga falta antes de guardar.
+          Saca una foto de tu boleta, o escanea con tu pistola lectora. Revisa y
+          corrige lo que haga falta antes de guardar.
         </p>
+
+        <div className="gun-hint">
+          <span className="gun-hint__dot" />
+          🔫 Pistola lista: escanea un producto y su código se agrega solo.
+          {lastGun && <strong className="gun-hint__last"> Último: {lastGun}</strong>}
+        </div>
 
         <form onSubmit={submit}>
           {/* Foto de la boleta + OCR */}

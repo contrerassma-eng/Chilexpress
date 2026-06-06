@@ -1,18 +1,26 @@
 import { useState } from 'react';
 import { fmtCLP, fmtRelative } from '../lib/format.js';
 import ProductThumb from './ProductThumb.jsx';
+import PhotoEditModal from './PhotoEditModal.jsx';
 
 // Tarjeta de un grupo de comparacion: un producto con su precio vigente en cada
 // supermercado, el mas barato destacado y el ahorro potencial.
 export default function ProductCard({ comp, rank, onRemoveEntry }) {
   const [open, setOpen] = useState(false);
+  const [editPhoto, setEditPhoto] = useState(false);
+  const [photoBump, setPhotoBump] = useState(0); // fuerza recarga de la miniatura
   const hasDiff = comp.count >= 2 && comp.diff > 0;
 
   return (
     <li className="pcard">
       <button className="pcard__head" onClick={() => setOpen((o) => !o)}>
         {rank != null && <span className="pcard__rank">{rank}</span>}
-        <ProductThumb barcode={comp.barcode} name={comp.product} />
+        <ProductThumb
+          key={photoBump}
+          barcode={comp.barcode}
+          name={comp.product}
+          onEdit={comp.barcode ? () => setEditPhoto(true) : null}
+        />
         <div className="pcard__title">
           <strong>{comp.product}</strong>
           <span className="muted">
@@ -67,6 +75,15 @@ export default function ProductCard({ comp, rank, onRemoveEntry }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {editPhoto && (
+        <PhotoEditModal
+          barcode={comp.barcode}
+          name={comp.product}
+          onClose={() => setEditPhoto(false)}
+          onSaved={() => setPhotoBump((n) => n + 1)}
+        />
       )}
     </li>
   );

@@ -12,7 +12,7 @@ import { makeEntry } from './pricing.js';
 // variable de build VITE_API_BASE (p. ej. para apuntar a un Worker de staging).
 const DEFAULT_API = 'https://superdelta.contreras-sma.workers.dev';
 
-const BASE = (import.meta.env.VITE_API_BASE || DEFAULT_API || '').replace(/\/$/, '');
+export const BASE = (import.meta.env.VITE_API_BASE || DEFAULT_API || '').replace(/\/$/, '');
 export const REMOTE = !!BASE;
 
 async function jfetch(path, opts = {}) {
@@ -59,3 +59,29 @@ const localBackend = {
 };
 
 export const backend = REMOTE ? remoteBackend : localBackend;
+
+// --- Fotos de producto compartidas (por codigo de barra) ---
+
+// Trae las fotos que han subido usuarios para una lista de codigos de barra.
+// Devuelve { [barcode]: { photo, name } }. Vacio en modo local.
+export async function fetchUserPhotos(codes) {
+  if (!REMOTE || !codes || codes.length === 0) return {};
+  try {
+    const q = codes.join(',');
+    const data = await jfetch(`/photos?codes=${encodeURIComponent(q)}`);
+    return data.photos || {};
+  } catch {
+    return {};
+  }
+}
+
+// Sube/actualiza la foto de un producto (compartida para ese codigo de barra).
+export async function uploadUserPhoto(barcode, photo, name) {
+  if (!REMOTE) throw new Error('Sin backend remoto');
+  const code = String(barcode || '').replace(/\D/g, '');
+  if (code.length < 8) throw new Error('Codigo de barra invalido');
+  await jfetch(`/photos/${code}`, {
+    method: 'PUT',
+    body: JSON.stringify({ photo, name: name || '' })
+  });
+}
