@@ -1,0 +1,23 @@
+name = "botiquin"
+main = "worker/index.js"
+compatibility_date = "2025-07-01"
+
+# El front (Vite) se sirve como assets estaticos desde el mismo Worker.
+# Solo /api/* pasa por el codigo del Worker; el resto lo resuelve el router de
+# assets y cualquier ruta desconocida devuelve index.html (SPA).
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "botiquin"
+database_id = "2f75da32-ab9c-4107-b4f7-6cd9c6d3d59a"
+
+[observability]
+enabled = true
+
+# El PIN del hogar NO va aca. Se guarda como secreto:
+#   npx wrangler secret put HOUSEHOLD_PIN
