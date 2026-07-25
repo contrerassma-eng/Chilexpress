@@ -56,9 +56,10 @@ await t('ruta inventada -> 404', async () => assert.equal((await req('/api/nada'
 console.log('\nCompra');
 await t('alta de producto con lote', async () => {
   const { state } = await enviar(
-    { id: mid('e1'), kind: 'compra', barcode: A, name: 'Paracetamol 500', expiry: '2027-05-31', qty: 2 }
+    { id: mid('e1'), kind: 'compra', barcode: A, name: 'Paracetamol 500', zona: 'botiquin', expiry: '2027-05-31', qty: 2 }
   );
   assert.equal(producto(state, A).name, 'Paracetamol 500');
+  assert.equal(producto(state, A).zona, 'botiquin');
   assert.equal(stock(state, A), 2);
 });
 
@@ -69,10 +70,11 @@ await t('reenviar la misma cola no duplica stock', async () => {
   assert.equal(stock(state, A), 2);
 });
 
-await t('segunda compra suma al mismo lote y no pisa el nombre', async () => {
-  const { state } = await enviar({ id: mid('e2'), kind: 'compra', barcode: A, name: '', expiry: '2027-05-31', qty: 3 });
+await t('segunda compra suma al mismo lote y no pisa nombre ni zona', async () => {
+  const { state } = await enviar({ id: mid('e2'), kind: 'compra', barcode: A, name: '', zona: '', expiry: '2027-05-31', qty: 3 });
   assert.equal(stock(state, A), 5);
   assert.equal(producto(state, A).name, 'Paracetamol 500');
+  assert.equal(producto(state, A).zona, 'botiquin');
 });
 
 await t('otra fecha crea otro lote', async () => {
@@ -118,6 +120,34 @@ await t('renombrar no toca el stock', async () => {
   const { state } = await enviar({ id: mid('e10'), kind: 'nombre', barcode: B, name: 'Suero fisiológico 5 ml', qty: 0 });
   assert.equal(producto(state, B).name, 'Suero fisiológico 5 ml');
   assert.equal(stock(state, B), 2);
+});
+
+console.log('\nZonas de la casa');
+await t('cada producto vive en su zona', async () => {
+  const { state } = await enviar(
+    { id: mid('z-a'), kind: 'compra', barcode: `${A}-fr`, name: 'Leche', zona: 'refrigerador', expiry: '', qty: 2 },
+    { id: mid('z-b'), kind: 'compra', barcode: `${A}-as`, name: 'Cloro', zona: 'aseo', expiry: '', qty: 1 }
+  );
+  assert.equal(producto(state, `${A}-fr`).zona, 'refrigerador');
+  assert.equal(producto(state, `${A}-as`).zona, 'aseo');
+});
+
+await t('se puede mover de zona sin tocar el stock', async () => {
+  const { state } = await enviar({ id: mid('z-c'), kind: 'nombre', barcode: `${A}-fr`, name: '', zona: 'despensa', qty: 0 });
+  assert.equal(producto(state, `${A}-fr`).zona, 'despensa');
+  assert.equal(stock(state, `${A}-fr`), 2);
+});
+
+await t('una zona inventada no mueve el producto', async () => {
+  const { state } = await enviar({ id: mid('z-d'), kind: 'compra', barcode: `${A}-fr`, name: '', zona: 'garaje', expiry: '', qty: 1 });
+  assert.equal(producto(state, `${A}-fr`).zona, 'despensa');
+  assert.equal(stock(state, `${A}-fr`), 3);
+});
+
+await t('el historial recuerda la zona', async () => {
+  const { movements } = await (await req('/api/movements?limit=300')).json();
+  const mov = movements.find((m) => m.id === mid('z-a'));
+  assert.equal(mov.zona, 'refrigerador');
 });
 
 console.log('\nValidacion de entrada');
@@ -166,11 +196,13 @@ await t('el manifest de la PWA existe', async () => {
 console.log('\nLimpieza');
 await t('borrar saca producto y lotes de la base', async () => {
   const { state } = await enviar(
-    { id: mid('z1'), kind: 'borrar', barcode: A, name: '', qty: 0 },
-    { id: mid('z2'), kind: 'borrar', barcode: B, name: '', qty: 0 },
-    { id: mid('z3'), kind: 'borrar', barcode: C, name: '', qty: 0 }
+    { id: mid('x-1'), kind: 'borrar', barcode: A, name: '', qty: 0 },
+    { id: mid('x-2'), kind: 'borrar', barcode: B, name: '', qty: 0 },
+    { id: mid('x-3'), kind: 'borrar', barcode: C, name: '', qty: 0 },
+    { id: mid('x-4'), kind: 'borrar', barcode: `${A}-fr`, name: '', qty: 0 },
+    { id: mid('x-5'), kind: 'borrar', barcode: `${A}-as`, name: '', qty: 0 }
   );
-  for (const barcode of [A, B, C]) {
+  for (const barcode of [A, B, C, `${A}-fr`, `${A}-as`]) {
     assert.equal(producto(state, barcode), undefined);
     assert.equal(lotes(state, barcode).length, 0);
   }

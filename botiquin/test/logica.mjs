@@ -3,6 +3,7 @@ import { parseGs1, gs1DateToIso, looksLikeGs1 } from '../src/lib/gs1.js';
 import { decodeScan, normalizeGtin, codigoSinBarras } from '../src/lib/codes.js';
 import { project, planConsumo, resumen } from '../src/lib/inventory.js';
 import { endOfMonth, isEndOfMonth, expiryState, fmtExpiry } from '../src/lib/format.js';
+import { ZONAS, zonaDe, esZona } from '../src/lib/zonas.js';
 
 let ok = 0;
 const t = (nombre, fn) => { fn(); ok += 1; console.log('  ok  ' + nombre); };
@@ -156,6 +157,83 @@ t('resumen cuenta vencidos, por vencer y agotados', () => {
   assert.equal(r.vencidos, 1);
   assert.equal(r.agotados, 1);
   assert.equal(r.conStock, 2);
+});
+
+console.log('\nZonas de la casa');
+const enDias = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+t('cada zona avisa con su propia anticipacion', () => {
+  const en20dias = enDias(20);
+  // 20 dias: en el botiquin todavia esta bien, en el refrigerador ya urge.
+  assert.equal(expiryState(en20dias, ZONAS.botiquin.aviso), 'pronto');
+  assert.equal(expiryState(en20dias, ZONAS.refrigerador.aviso), 'ok');
+  assert.equal(expiryState(enDias(3), ZONAS.refrigerador.aviso), 'pronto');
+  assert.equal(expiryState(enDias(3), ZONAS.botiquin.aviso), 'pronto');
+});
+
+t('zona desconocida cae al botiquin', () => {
+  assert.equal(zonaDe('garaje').id, 'botiquin');
+  assert.equal(esZona('despensa'), true);
+  assert.equal(esZona('garaje'), false);
+});
+
+t('el producto guarda su zona y su umbral', () => {
+  const base = { products: [{ barcode: 'l1', name: 'Leche', zona: 'refrigerador' }], lots: [{ barcode: 'l1', expiry: enDias(20), qty: 1 }] };
+  const item = project(base, []).byBarcode.get('l1');
+  assert.equal(item.zona, 'refrigerador');
+  assert.equal(item.aviso, ZONAS.refrigerador.aviso);
+  assert.equal(item.estado, 'ok'); // 20 dias es mucho para la leche, pero aun no urge
+});
+
+t('lo viejo sin zona queda en el botiquin', () => {
+  const base = { products: [{ barcode: 'x', name: 'Aspirina' }], lots: [{ barcode: 'x', expiry: '', qty: 2 }] };
+  assert.equal(project(base, []).byBarcode.get('x').zona, 'botiquin');
+});
+
+t('una compra pendiente crea el producto en su zona', () => {
+  const cola = [{ id: 'a', kind: 'compra', barcode: 'c1', name: 'Cloro', zona: 'aseo', expiry: '', qty: 2 }];
+  assert.equal(project({ products: [], lots: [] }, cola).byBarcode.get('c1').zona, 'aseo');
+});
+
+t('un consumo sin zona no mueve el producto', () => {
+  const base = { products: [{ barcode: 'l1', name: 'Leche', zona: 'refrigerador' }], lots: [{ barcode: 'l1', expiry: '', qty: 3 }] };
+  const cola = [{ id: 'a', kind: 'consumo', barcode: 'l1', name: '', zona: '', expiry: '', qty: 1 }];
+  const item = project(base, cola).byBarcode.get('l1');
+  assert.equal(item.zona, 'refrigerador');
+  assert.equal(item.total, 2);
+});
+
+t('mover de zona no toca el stock', () => {
+  const base = { products: [{ barcode: 'l1', name: 'Leche', zona: 'despensa' }], lots: [{ barcode: 'l1', expiry: '', qty: 3 }] };
+  const cola = [{ id: 'a', kind: 'nombre', barcode: 'l1', name: 'Leche entera', zona: 'refrigerador', qty: 0 }];
+  const item = project(base, cola).byBarcode.get('l1');
+  assert.equal(item.zona, 'refrigerador');
+  assert.equal(item.name, 'Leche entera');
+  assert.equal(item.total, 3);
+});
+
+t('el resumen separa por zona', () => {
+  const base = {
+    products: [
+      { barcode: 'a', name: 'A', zona: 'botiquin' },
+      { barcode: 'b', name: 'B', zona: 'despensa' },
+      { barcode: 'c', name: 'C', zona: 'despensa' }
+    ],
+    lots: [
+      { barcode: 'a', expiry: '2000-01-01', qty: 1 },
+      { barcode: 'b', expiry: '2000-01-01', qty: 1 }
+    ]
+  };
+  const r = resumen(project(base, []).items);
+  assert.equal(r.vencidos, 2);
+  assert.equal(r.porZona.botiquin.vencidos, 1);
+  assert.equal(r.porZona.despensa.vencidos, 1);
+  assert.equal(r.porZona.despensa.agotados, 1);
+  assert.equal(r.porZona.aseo.total, 0);
 });
 
 console.log(`\n${ok} pruebas OK\n`);

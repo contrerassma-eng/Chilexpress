@@ -1,4 +1,5 @@
 import { expiryState } from './format.js';
+import { ZONA_POR_DEFECTO, esZona, listaZonas, zonaDe } from './zonas.js';
 
 /**
  * Proyeccion del inventario: parte de la foto que mando el servidor y le aplica
@@ -20,9 +21,22 @@ function applyMovement(products, lots, m) {
   }
 
   if (!products.has(barcode)) {
-    products.set(barcode, { barcode, name: m.name || barcode, note: m.note || '' });
-  } else if (m.name) {
-    products.set(barcode, { ...products.get(barcode), name: m.name });
+    products.set(barcode, {
+      barcode,
+      name: m.name || barcode,
+      note: m.note || '',
+      zona: esZona(m.zona) ? m.zona : ZONA_POR_DEFECTO
+    });
+  } else {
+    // Un movimiento sin nombre o sin zona (consumo, ajuste) no pisa la ficha.
+    const antes = products.get(barcode);
+    if (m.name || esZona(m.zona)) {
+      products.set(barcode, {
+        ...antes,
+        name: m.name || antes.name,
+        zona: esZona(m.zona) ? m.zona : antes.zona
+      });
+    }
   }
 
   if (m.kind === 'nombre') return;
@@ -70,14 +84,17 @@ export function project(snapshot, outbox = []) {
     const lotes = ordenarLotes(porProducto.get(p.barcode) || []);
     const total = lotes.reduce((s, l) => s + l.qty, 0);
     const conFecha = lotes.find((l) => l.expiry);
+    const zona = esZona(p.zona) ? p.zona : ZONA_POR_DEFECTO;
     items.push({
       barcode: p.barcode,
       name: p.name || p.barcode,
       note: p.note || '',
+      zona,
+      aviso: zonaDe(zona).aviso,
       lotes,
       total,
       proximo: conFecha?.expiry || '',
-      estado: total === 0 ? 'agotado' : expiryState(conFecha?.expiry || '')
+      estado: total === 0 ? 'agotado' : expiryState(conFecha?.expiry || '', zonaDe(zona).aviso)
     });
   }
 
@@ -104,7 +121,7 @@ export function planConsumo(item, cantidad) {
   return { plan, faltante: falta };
 }
 
-export function resumen(items) {
+function contar(items) {
   let vencidos = 0;
   let porVencer = 0;
   let agotados = 0;
@@ -114,4 +131,13 @@ export function resumen(items) {
     else if (i.estado === 'pronto') porVencer += 1;
   }
   return { vencidos, porVencer, agotados, total: items.length, conStock: items.length - agotados };
+}
+
+/** Totales de toda la casa y de cada zona por separado. */
+export function resumen(items) {
+  const porZona = {};
+  for (const zona of listaZonas) {
+    porZona[zona.id] = contar(items.filter((i) => i.zona === zona.id));
+  }
+  return { ...contar(items), porZona };
 }

@@ -29,8 +29,10 @@ export default function PinGate({ onEntrar, aviso }) {
   return (
     <div className="portada">
       <div className="portada__marca" aria-hidden="true">✚</div>
-      <h1>Botiquín de casa</h1>
-      <p className="portada__bajada">Inventario de remedios: escanea, suma lo que compras y descuenta lo que ocupas.</p>
+      <h1>Inventario de casa</h1>
+      <p className="portada__bajada">
+        Botiquín, despensa, refrigerador y aseo: escanea, suma lo que compras y descuenta lo que ocupas.
+      </p>
 
       {aviso && <p className="alerta">{aviso}</p>}
 

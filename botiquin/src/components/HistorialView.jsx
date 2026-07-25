@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { fmtDateTime, fmtExpiry } from '../lib/format.js';
+import { ZONAS } from '../lib/zonas.js';
 
 const ETIQUETA = {
   compra: { texto: 'Compra', signo: '+', clase: 'mov--compra' },
@@ -43,7 +44,10 @@ export default function HistorialView({ pin, pendientes }) {
             <li key={m.id} className={`mov ${et.clase}`}>
               <span className="mov__signo">{et.signo}{et.signo && m.qty}</span>
               <span className="mov__texto">
-                <strong>{m.name || m.barcode}</strong>
+                <strong>
+                  {ZONAS[m.zona] ? `${ZONAS[m.zona].icono} ` : ''}
+                  {m.name || m.barcode}
+                </strong>
                 <small>
                   {et.texto}
                   {m.expiry ? ` · vence ${fmtExpiry(m.expiry)}` : ''}

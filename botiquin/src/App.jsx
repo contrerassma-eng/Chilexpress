@@ -7,7 +7,10 @@ import HistorialView from './components/HistorialView.jsx';
 import CompraSheet from './components/CompraSheet.jsx';
 import ConsumoSheet from './components/ConsumoSheet.jsx';
 import ProductoSheet from './components/ProductoSheet.jsx';
+import SelectorZona from './components/SelectorZona.jsx';
 import { codigoSinBarras } from './lib/codes.js';
+import { almacen } from './lib/storage.js';
+import { ZONA_POR_DEFECTO, zonaDe } from './lib/zonas.js';
 
 const ESTADO_SYNC = {
   idle: { texto: 'conectando', clase: 'espera' },
@@ -21,6 +24,8 @@ export default function App() {
   const b = useBotiquin();
   const [tab, setTab] = useState('escanear');
   const [modo, setModo] = useState('compra');
+  // La zona elegida se recuerda: si ordenas la despensa, sigues en la despensa.
+  const [zona, setZona] = useState(() => almacen.zona() || ZONA_POR_DEFECTO);
   const [hoja, setHoja] = useState(null);
   const [flash, setFlash] = useState('');
   const [menu, setMenu] = useState(false);
@@ -40,6 +45,7 @@ export default function App() {
   }, []);
 
   useEffect(() => () => window.clearTimeout(temporizador.current), []);
+  useEffect(() => { almacen.setZona(zona); }, [zona]);
 
   function avisar(texto) {
     setFlash(texto);
@@ -77,11 +83,11 @@ export default function App() {
     }
   }
 
-  function guardarCompra({ barcode, name, qty, expiry }) {
+  function guardarCompra({ barcode, name, qty, expiry, zona: destino }) {
     const codigo = barcode || codigoSinBarras(name);
-    b.comprar({ barcode: codigo, name, qty, expiry });
+    b.comprar({ barcode: codigo, name, qty, expiry, zona: destino });
     setHoja(null);
-    avisar(`+${qty} ${name}`);
+    avisar(`+${qty} ${name} → ${zonaDe(destino).nombre}`);
   }
 
   function consumir(cantidad, kind) {
@@ -118,7 +124,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="barra">
-        <h1>Botiquín</h1>
+        <h1>Casa</h1>
         <button className={`estado estado--${sync.clase}`} onClick={b.sincronizar} title={b.state.error}>
           {sync.texto}
           {b.pendientes > 0 && <span className="estado__n">{b.pendientes}</span>}
@@ -138,20 +144,30 @@ export default function App() {
         )}
       </header>
 
+      {tab !== 'historial' && (
+        <SelectorZona zona={zona} onZona={setZona} totales={b.totales} todas={tab === 'inventario'} />
+      )}
+
       {b.totales.vencidos > 0 && tab !== 'inventario' && (
-        <button className="banner banner--malo" onClick={() => setTab('inventario')}>
-          {b.totales.vencidos} producto(s) vencido(s) en el botiquín
+        <button className="banner banner--malo" onClick={() => { setZona('todas'); setTab('inventario'); }}>
+          {b.totales.vencidos} producto(s) vencido(s) en la casa
         </button>
       )}
 
       <main className="contenido">
         {tab === 'escanear' && (
-          <ScanView modo={modo} setModo={setModo} onDetectado={alDetectar} pausado={!!hoja} />
+          <ScanView
+            modo={modo}
+            setModo={setModo}
+            onDetectado={alDetectar}
+            pausado={!!hoja}
+            zona={zona}
+          />
         )}
         {tab === 'inventario' && (
           <InventarioView
             items={b.items}
-            totales={b.totales}
+            zona={zona}
             onAbrir={(item) => setHoja({ tipo: 'producto', barcode: item.barcode })}
           />
         )}
@@ -173,6 +189,7 @@ export default function App() {
           barcode={hoja.barcode}
           item={itemActivo}
           expiryInicial={hoja.expiry}
+          zonaActiva={zona}
           avisoConsumo={hoja.avisoConsumo}
           onGuardar={guardarCompra}
           onClose={() => setHoja(null)}
@@ -187,7 +204,7 @@ export default function App() {
         <ProductoSheet
           item={itemActivo}
           onClose={() => setHoja(null)}
-          onRenombrar={(barcode, nombre) => { b.renombrar(barcode, nombre); avisar('Nombre actualizado'); }}
+          onRenombrar={(barcode, nombre, destino) => { b.renombrar(barcode, nombre, destino); avisar('Ficha actualizada'); }}
           onAjustar={(item, expiry, cantidad) => b.ajustar(item, expiry, cantidad)}
           onBorrar={(item) => { b.borrar(item); avisar(`${item.name} eliminado`); }}
         />

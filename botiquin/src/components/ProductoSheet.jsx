@@ -1,14 +1,21 @@
 import { useState } from 'react';
 import Sheet from './Sheet.jsx';
 import { expiryLabel, expiryState, fmtExpiry } from '../lib/format.js';
+import { listaZonas, zonaDe } from '../lib/zonas.js';
 
-/** Detalle de un producto: corregir nombre, arreglar cantidades, borrarlo. */
+/** Detalle: corregir nombre, cambiar de zona, arreglar cantidades, borrarlo. */
 export default function ProductoSheet({ item, onClose, onRenombrar, onAjustar, onBorrar }) {
   const [nombre, setNombre] = useState(item.name);
-  const cambioNombre = nombre.trim() && nombre.trim() !== item.name;
+  const [zona, setZona] = useState(item.zona);
+  const hayCambios = (nombre.trim() && nombre.trim() !== item.name) || zona !== item.zona;
+
+  function guardarFicha() {
+    onRenombrar(item.barcode, nombre.trim() || item.name, zona);
+    onClose();
+  }
 
   function borrar() {
-    if (confirm(`¿Sacar "${item.name}" del botiquín? Se borra su historial de stock.`)) {
+    if (confirm(`¿Sacar "${item.name}" del inventario? Se borra su stock.`)) {
       onBorrar(item);
       onClose();
     }
@@ -18,27 +25,43 @@ export default function ProductoSheet({ item, onClose, onRenombrar, onAjustar, o
     <Sheet titulo={item.name} subtitulo={item.barcode} onClose={onClose}>
       <label>
         Nombre
-        <div className="fila">
-          <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-          {cambioNombre && (
-            <button className="btn" onClick={() => { onRenombrar(item.barcode, nombre.trim()); onClose(); }}>
-              Guardar
-            </button>
-          )}
-        </div>
+        <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} />
       </label>
+
+      <div>
+        <label>Dónde está</label>
+        <div className="chips">
+          {listaZonas.map((z) => (
+            <button
+              key={z.id}
+              type="button"
+              className={`chip ${zona === z.id ? 'chip--activo' : ''}`}
+              onClick={() => setZona(z.id)}
+            >
+              {z.icono} {z.nombre}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {hayCambios && (
+        <button className="btn btn--principal" onClick={guardarFicha}>Guardar cambios</button>
+      )}
 
       <h3 className="titulillo">Lotes por vencimiento</h3>
       {item.lotes.length === 0 ? (
-        <p className="pista">Sin stock. Queda guardado para que reconozcas el código la próxima vez.</p>
+        <p className="pista">
+          Sin stock. Queda guardado en {zonaDe(item.zona).nombre.toLowerCase()} para reconocer el código
+          la próxima vez.
+        </p>
       ) : (
         <div className="lotes">
           {item.lotes.map((l) => (
             <div key={l.expiry || 'sin'} className="lote">
-              <span className={`punto punto--${expiryState(l.expiry)}`} />
+              <span className={`punto punto--${expiryState(l.expiry, item.aviso)}`} />
               <span className="lote__fecha">
                 {fmtExpiry(l.expiry)}
-                <small>{expiryLabel(l.expiry)}</small>
+                <small>{expiryLabel(l.expiry, item.aviso)}</small>
               </span>
               <div className="cantidad cantidad--chica">
                 <button type="button" onClick={() => onAjustar(item, l.expiry, l.qty - 1)} aria-label="Menos">−</button>
@@ -53,7 +76,7 @@ export default function ProductoSheet({ item, onClose, onRenombrar, onAjustar, o
         </div>
       )}
 
-      <button className="btn btn--peligro" onClick={borrar}>Eliminar del botiquín</button>
+      <button className="btn btn--peligro" onClick={borrar}>Eliminar del inventario</button>
     </Sheet>
   );
 }

@@ -25,6 +25,9 @@ const JSON_HEADERS = {
 const KINDS = new Set(['compra', 'consumo', 'descarte', 'ajuste', 'nombre', 'borrar']);
 const KINDS_SIN_CANTIDAD = new Set(['ajuste', 'nombre', 'borrar']);
 
+// Zonas de la casa. Cualquier otra cosa se ignora y el producto queda donde estaba.
+const ZONAS = new Set(['botiquin', 'despensa', 'refrigerador', 'aseo']);
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
@@ -67,7 +70,7 @@ function isoOf(v) {
 
 async function readState(env) {
   const [products, lots] = await env.DB.batch([
-    env.DB.prepare('SELECT barcode, name, note, created_at, updated_at FROM products ORDER BY name'),
+    env.DB.prepare('SELECT barcode, name, note, zona, created_at, updated_at FROM products ORDER BY name'),
     env.DB.prepare('SELECT id, barcode, expiry, qty, updated_at FROM lots WHERE qty > 0')
   ]);
   return {
@@ -93,12 +96,14 @@ async function applyMovements(env, raw, who) {
     // En 'ajuste' el 0 es valido (dejar el lote en cero = borrarlo).
     const qty = KINDS_SIN_CANTIDAD.has(kind) ? nonNegInt(m?.qty) : posInt(m?.qty);
     if (!KINDS_SIN_CANTIDAD.has(kind) && qty === 0) continue;
+    const zona = str(m?.zona, 20);
     movements.push({
       id,
       kind,
       barcode,
       name: str(m?.name, 120),
       note: str(m?.note, 200),
+      zona: ZONAS.has(zona) ? zona : '',
       expiry: expiryOf(m?.expiry),
       qty,
       at: isoOf(m?.at),
@@ -119,9 +124,9 @@ async function applyMovements(env, raw, who) {
   const stmts = [];
   const bitacora = (m) =>
     env.DB.prepare(
-      `INSERT OR IGNORE INTO movements (id, kind, barcode, name, expiry, qty, at, who, applied_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
-    ).bind(m.id, m.kind, m.barcode, m.name, m.expiry, m.qty, m.at, m.who, appliedAt);
+      `INSERT OR IGNORE INTO movements (id, kind, barcode, name, expiry, qty, at, who, zona, applied_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+    ).bind(m.id, m.kind, m.barcode, m.name, m.expiry, m.qty, m.at, m.who, m.zona, appliedAt);
 
   for (const m of movements) {
     if (seen.has(m.id)) continue;
@@ -134,17 +139,19 @@ async function applyMovements(env, raw, who) {
     }
 
     // El producto siempre existe antes de tocar sus lotes. Un movimiento sin
-    // nombre (consumo, ajuste) nunca debe pisar el nombre ya guardado; solo si
-    // el producto es nuevo cae al codigo como nombre provisorio.
+    // nombre o sin zona (consumo, ajuste) nunca debe pisar lo ya guardado; solo
+    // si el producto es nuevo cae al codigo como nombre provisorio.
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO products (barcode, name, note, created_at, updated_at)
-         VALUES (?1, CASE WHEN ?2 <> '' THEN ?2 ELSE ?1 END, ?3, ?4, ?4)
+        `INSERT INTO products (barcode, name, note, zona, created_at, updated_at)
+         VALUES (?1, CASE WHEN ?2 <> '' THEN ?2 ELSE ?1 END, ?3,
+                 CASE WHEN ?5 <> '' THEN ?5 ELSE 'botiquin' END, ?4, ?4)
          ON CONFLICT(barcode) DO UPDATE SET
            name = CASE WHEN ?2 <> '' THEN ?2 ELSE products.name END,
            note = CASE WHEN ?3 <> '' THEN ?3 ELSE products.note END,
+           zona = CASE WHEN ?5 <> '' THEN ?5 ELSE products.zona END,
            updated_at = ?4`
-      ).bind(m.barcode, m.name, m.note, appliedAt)
+      ).bind(m.barcode, m.name, m.note, appliedAt, m.zona)
     );
 
     // 'nombre' solo corrige la ficha: no toca stock.
@@ -215,7 +222,7 @@ async function handle(request, env, url) {
   if (path === '/api/movements' && request.method === 'GET') {
     const limit = Math.min(Math.max(nonNegInt(url.searchParams.get('limit')) || 60, 1), 300);
     const { results } = await env.DB
-      .prepare('SELECT id, kind, barcode, name, expiry, qty, at, who FROM movements ORDER BY at DESC LIMIT ?1')
+      .prepare('SELECT id, kind, barcode, name, expiry, qty, at, who, zona FROM movements ORDER BY at DESC LIMIT ?1')
       .bind(limit)
       .all();
     return json({ movements: results ?? [] });

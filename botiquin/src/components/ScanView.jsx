@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import BarcodeScanner from './BarcodeScanner.jsx';
 import { decodeScan } from '../lib/codes.js';
+import { zonaDe } from '../lib/zonas.js';
 
 function pitido() {
   try {
@@ -19,7 +20,7 @@ function pitido() {
 }
 
 /** Pantalla principal: elegir modo, escanear y caer al formulario que toca. */
-export default function ScanView({ modo, setModo, onDetectado, pausado }) {
+export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) {
   const [camara, setCamara] = useState(false);
   const [manual, setManual] = useState('');
   const [ilegible, setIlegible] = useState(false);
@@ -66,6 +67,14 @@ export default function ScanView({ modo, setModo, onDetectado, pausado }) {
           <span>saca del stock</span>
         </button>
       </div>
+
+      {modo === 'compra' && (
+        <p className="pista pista--centro">
+          {zona === 'todas'
+            ? 'Elegirás la zona al guardar cada producto.'
+            : `Lo que agregues entra a ${zonaDe(zona).nombre}.`}
+        </p>
+      )}
 
       {camara ? (
         <>

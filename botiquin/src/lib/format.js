@@ -2,7 +2,7 @@
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-// Cuantos dias antes de caducar mostramos la alerta ambar.
+// Dias de anticipacion del aviso ambar cuando no se indica el de la zona.
 export const DIAS_AVISO = 60;
 
 export function nowIso() {
@@ -60,31 +60,31 @@ export function daysUntil(expiry) {
   return Math.round((target - today) / 86400000);
 }
 
-// 'vencido' | 'pronto' | 'ok' | 'sin-fecha'
-export function expiryState(expiry) {
+// 'vencido' | 'pronto' | 'ok' | 'sin-fecha'. `aviso` son los dias de
+// anticipacion, que dependen de la zona: el refrigerador avisa mucho antes.
+export function expiryState(expiry, aviso = DIAS_AVISO) {
   const dias = daysUntil(expiry);
   if (dias === null) return 'sin-fecha';
   if (dias < 0) return 'vencido';
-  if (dias <= DIAS_AVISO) return 'pronto';
+  if (dias <= aviso) return 'pronto';
   return 'ok';
 }
 
-export function expiryLabel(expiry) {
+export function expiryLabel(expiry, aviso = DIAS_AVISO) {
   const dias = daysUntil(expiry);
   if (dias === null) return 'sin fecha';
   if (dias < 0) return `vencido hace ${Math.abs(dias)} d`;
   if (dias === 0) return 'vence hoy';
-  if (dias <= DIAS_AVISO) return `vence en ${dias} d`;
+  if (dias <= aviso) return `vence en ${dias} d`;
   return fmtExpiry(expiry);
 }
 
 // Linea que resume el vencimiento en la lista, sin repetir la fecha dos veces.
-export function expiryResumen(expiry) {
-  const estado = expiryState(expiry);
+export function expiryResumen(expiry, aviso = DIAS_AVISO) {
+  const estado = expiryState(expiry, aviso);
   if (estado === 'sin-fecha') return 'sin fecha de vencimiento';
-  if (estado === 'vencido') return `${expiryLabel(expiry)} · ${fmtExpiry(expiry)}`;
-  if (estado === 'pronto') return `${expiryLabel(expiry)} · ${fmtExpiry(expiry)}`;
-  return `vence ${fmtExpiry(expiry)}`;
+  if (estado === 'ok') return `vence ${fmtExpiry(expiry)}`;
+  return `${expiryLabel(expiry, aviso)} · ${fmtExpiry(expiry)}`;
 }
 
 export function fmtDateTime(iso) {

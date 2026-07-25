@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'Botiquin de casa',
-        short_name: 'Botiquin',
-        description: 'Inventario del botiquin: escanea, agrega compras y descuenta lo que consumes',
+        name: 'Inventario de casa',
+        short_name: 'Casa',
+        description: 'Botiquin, despensa, refrigerador y aseo: escanea, agrega compras y descuenta lo que consumes',
         lang: 'es',
         start_url: '/',
         scope: '/',

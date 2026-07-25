@@ -1,41 +1,46 @@
 import { useMemo, useState } from 'react';
 import { expiryResumen } from '../lib/format.js';
+import { resumen } from '../lib/inventory.js';
+import { zonaDe } from '../lib/zonas.js';
 
 const FILTROS = [
   { id: 'todos', texto: 'Todos' },
   { id: 'pronto', texto: 'Por vencer' },
   { id: 'vencido', texto: 'Vencidos' },
-  { id: 'agotado', texto: 'Agotados' }
+  { id: 'agotado', texto: 'Por comprar' }
 ];
 
-export default function InventarioView({ items, totales, onAbrir }) {
+export default function InventarioView({ items, zona, onAbrir }) {
   const [q, setQ] = useState('');
   const [filtro, setFiltro] = useState('todos');
 
-  const cuentas = {
-    todos: totales.conStock,
-    pronto: totales.porVencer,
-    vencido: totales.vencidos,
-    agotado: totales.agotados
-  };
+  const deLaZona = useMemo(
+    () => (zona === 'todas' ? items : items.filter((i) => i.zona === zona)),
+    [items, zona]
+  );
+
+  const cuentas = useMemo(() => {
+    const r = resumen(deLaZona);
+    return { todos: r.conStock, pronto: r.porVencer, vencido: r.vencidos, agotado: r.agotados };
+  }, [deLaZona]);
 
   const lista = useMemo(() => {
     const texto = q.trim().toLowerCase();
-    return items.filter((i) => {
-      // "Todos" muestra lo que hay en el mueble; los agotados tienen su propia pestaña.
+    return deLaZona.filter((i) => {
+      // "Todos" muestra lo que hay en casa; lo agotado tiene su propia pestaña.
       const pasaFiltro = filtro === 'todos' ? i.estado !== 'agotado' : i.estado === filtro;
       if (!pasaFiltro) return false;
       if (!texto) return true;
       return i.name.toLowerCase().includes(texto) || i.barcode.toLowerCase().includes(texto);
     });
-  }, [items, q, filtro]);
+  }, [deLaZona, q, filtro]);
 
   return (
     <section className="inventario">
       <input
         className="buscador"
         type="search"
-        placeholder="Buscar remedio"
+        placeholder="Buscar"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
@@ -54,8 +59,8 @@ export default function InventarioView({ items, totales, onAbrir }) {
 
       {lista.length === 0 ? (
         <p className="vacio">
-          {items.length === 0
-            ? 'El botiquín está vacío. Escanea la primera caja en modo Compra.'
+          {deLaZona.length === 0
+            ? `Nada guardado todavía${zona === 'todas' ? '' : ` en ${zonaDe(zona).nombre.toLowerCase()}`}. Escanea la primera caja en modo Compra.`
             : 'Nada por acá con ese filtro.'}
         </p>
       ) : (
@@ -67,7 +72,9 @@ export default function InventarioView({ items, totales, onAbrir }) {
                 <span className="item__texto">
                   <strong>{item.name}</strong>
                   <small>
-                    {item.estado === 'agotado' ? 'sin stock' : expiryResumen(item.proximo)}
+                    {/* Viendo todas las zonas, el icono dice de dónde es cada cosa. */}
+                    {zona === 'todas' && `${zonaDe(item.zona).icono} `}
+                    {item.estado === 'agotado' ? 'sin stock' : expiryResumen(item.proximo, item.aviso)}
                     {item.lotes.length > 1 && ` · ${item.lotes.length} lotes`}
                   </small>
                 </span>

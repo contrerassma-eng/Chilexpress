@@ -6,9 +6,11 @@ import { endOfMonth, isEndOfMonth, toMonthInput } from '../lib/format.js';
  * mes/año y guardamos el ultimo dia de ese mes. Igual se puede poner el dia
  * exacto o declarar que el producto no caduca.
  */
-export default function Vencimiento({ value, onChange }) {
+export default function Vencimiento({ value, onChange, modoInicial = 'mes' }) {
+  // El modo de partida lo pone la zona: el refrigerador arranca en dia exacto
+  // y el aseo en "no caduca". Si ya hay fecha, manda la fecha.
   const [modo, setModo] = useState(() => {
-    if (!value) return 'mes';
+    if (!value) return modoInicial;
     return isEndOfMonth(value) ? 'mes' : 'dia';
   });
 

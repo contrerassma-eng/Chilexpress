@@ -3,18 +3,19 @@ import Sheet from './Sheet.jsx';
 import Cantidad from './Cantidad.jsx';
 import { planConsumo } from '../lib/inventory.js';
 import { expiryLabel, expiryState, fmtExpiry } from '../lib/format.js';
+import { zonaDe } from '../lib/zonas.js';
 
 /** Baja de stock. Siempre sale primero lo que vence antes. */
 export default function ConsumoSheet({ item, onConsumir, onClose }) {
   const [cantidad, setCantidad] = useState(1);
   const { plan } = planConsumo(item, cantidad);
   const primerLote = item.lotes[0];
-  const vencido = expiryState(primerLote?.expiry) === 'vencido';
+  const vencido = expiryState(primerLote?.expiry, item.aviso) === 'vencido';
 
   return (
     <Sheet
       titulo={item.name}
-      subtitulo={`${item.total} en el botiquín`}
+      subtitulo={`${item.total} en ${zonaDe(item.zona).nombre.toLowerCase()}`}
       onClose={onClose}
       footer={
         <div className="pie-acciones">
@@ -39,9 +40,9 @@ export default function ConsumoSheet({ item, onConsumir, onClose }) {
           const enPlan = plan.find((p) => p.expiry === l.expiry);
           return (
             <div key={l.expiry || 'sin'} className={`lote ${enPlan ? 'lote--activo' : ''}`}>
-              <span className={`punto punto--${expiryState(l.expiry)}`} />
+              <span className={`punto punto--${expiryState(l.expiry, item.aviso)}`} />
               <span className="lote__fecha">{fmtExpiry(l.expiry)}</span>
-              <span className="lote__aviso">{expiryLabel(l.expiry)}</span>
+              <span className="lote__aviso">{expiryLabel(l.expiry, item.aviso)}</span>
               <span className="lote__qty">
                 {enPlan ? `${l.qty} → ${l.qty - enPlan.qty}` : l.qty}
               </span>

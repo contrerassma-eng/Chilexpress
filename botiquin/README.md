@@ -1,23 +1,43 @@
-# Botiquín de casa
+# Inventario de casa
 
-Inventario del botiquín familiar: escaneas la caja, en **modo Compra** suma stock y en
-**modo Consumo** lo descuenta. Nada más. Se instala como app en Android y iPhone.
+Escaneas la caja, en **modo Compra** suma stock y en **modo Consumo** lo descuenta.
+Nada más. Se instala como app en Android y iPhone.
 
 Reutiliza el motor de lectura de códigos del piloto de Chile Express que vive en la raíz
 de este repo (formatos acotados + doble lectura antes de aceptar, para no leer basura),
 pero acá el estado compartido vive en **Cloudflare D1** en vez de quedarse en el teléfono.
 
+> La carpeta se sigue llamando `botiquin/` y el Worker también, porque así nació y
+> cambiarlo movería la dirección que ya está instalada en los teléfonos.
+
+## Las cuatro zonas
+
+No son cuatro listas iguales: cada una avisa con la anticipación que tiene sentido ahí y
+pide la fecha como viene impresa en ese tipo de producto.
+
+| Zona | Avisa | La fecha se pide como |
+|---|---|---|
+| 💊 Botiquín | 60 días antes | mes / año (*VENC 05/2027*) |
+| 🥫 Despensa | 30 días antes | mes / año |
+| 🧊 Refrigerador | 5 días antes | día exacto |
+| 🧽 Aseo | 30 días antes | sin fecha |
+
+La zona vive en el producto, no en el lote: un remedio o un tarro de café está en un solo
+lugar. Se puede mover después desde su ficha. Todo lo que existía antes de las zonas
+quedó en el botiquín.
+
 ## Qué hace
 
 - **Escanear**: EAN-13, EAN-8, UPC-A/E, Code-128 y **DataMatrix GS1**. Si la caja trae
   DataMatrix, la fecha de vencimiento se rellena sola (lee el AI 17 del código).
-- **Compra**: pide nombre, cantidad y vencimiento. Si el código ya se escaneó antes, el
-  nombre viene puesto y solo confirmas.
+- **Compra**: pide nombre, zona, cantidad y vencimiento. Si el código ya se escaneó antes,
+  nombre y zona vienen puestos y solo confirmas.
 - **Consumo**: descuenta empezando por el lote que vence primero (FEFO). Si sacas 3 y en
   el lote más viejo hay 2, saca 2 de ese y 1 del siguiente.
-- **Inventario**: buscador y filtros por *por vencer* (60 días), *vencidos* y *agotados*.
-  Los agotados quedan guardados para que reconozca el código la próxima compra.
-- **Historial**: quién agregó o sacó qué y cuándo.
+- **Inventario**: por zona o todo junto, con buscador y filtros de *por vencer*,
+  *vencidos* y *por comprar*. Lo agotado queda guardado, así reconoce el código en la
+  próxima compra y de paso sirve de lista de compras.
+- **Historial**: quién agregó o sacó qué, cuándo y de qué zona.
 - **Sin señal**: la app abre igual, los movimientos quedan en cola y suben solos cuando
   vuelve internet. Cada movimiento lleva un id único, así que reintentar nunca duplica stock.
 - **Sin trámite de entrada**: se abre y ya está. Si se le pone PIN (ver más abajo), lo
@@ -31,11 +51,19 @@ Lo que **no** hace, a propósito: recetas, dosis, recordatorios, usuarios, fotos
 |---|---|
 | `src/` | La app (React + Vite, PWA instalable) |
 | `worker/index.js` | La API sobre Cloudflare Workers |
-| `migrations/0001_init.sql` | Tablas de D1 |
+| `migrations/` | Esquema de D1, ya aplicado en la base |
 | `wrangler.toml` | Un solo Worker sirve la app y `/api/*` |
 
-Tres tablas: `products` (código → nombre), `lots` (un lote por fecha de vencimiento) y
-`movements` (bitácora + control de duplicados). El stock de un remedio es la suma de sus lotes.
+Tres tablas: `products` (código → nombre y zona), `lots` (un lote por fecha de
+vencimiento) y `movements` (bitácora + control de duplicados). El stock de un producto es
+la suma de sus lotes.
+
+Para recrear la base desde cero hay que aplicar las migraciones en orden:
+
+```bash
+npx wrangler d1 execute botiquin --remote --file=./migrations/0001_init.sql
+npx wrangler d1 execute botiquin --remote --file=./migrations/0002_zonas.sql
+```
 
 ## Puesta en marcha
 
@@ -110,7 +138,7 @@ red de la casa conviene desplegar directamente: es cosa de segundos.
 ## Pruebas
 
 ```bash
-npm test          # logica pura: GS1, FEFO, cola offline, fechas (32 casos)
+npm test          # logica pura: GS1, FEFO, cola offline, fechas, zonas (40 casos)
 
 npm run dev:api   # en otra consola
 npm run test:api  # la API real contra D1 local

@@ -133,19 +133,22 @@ export function StoreProvider({ children }) {
 
   const acciones = useMemo(() => {
     const encolar = (...movimientos) => dispatch({ type: 'ENCOLAR', movimientos });
+    // zona vacia = "no tocar la ficha del producto". Solo la mandan las
+    // acciones que de verdad deciden donde vive el producto.
     const base = (extra) => ({
       id: uid(),
       at: nowIso(),
       who: ref.current.who || '',
       expiry: '',
       name: '',
+      zona: '',
       qty: 1,
       ...extra
     });
 
     return {
-      comprar: ({ barcode, name, expiry, qty, note }) =>
-        encolar(base({ kind: 'compra', barcode, name, expiry: expiry || '', qty: Math.max(1, qty || 1), note })),
+      comprar: ({ barcode, name, expiry, qty, note, zona }) =>
+        encolar(base({ kind: 'compra', barcode, name, zona, expiry: expiry || '', qty: Math.max(1, qty || 1), note })),
 
       // Descuenta empezando por el lote que vence primero (FEFO).
       consumir: (item, cantidad, kind = 'consumo') => {
@@ -162,8 +165,9 @@ export function StoreProvider({ children }) {
       ajustar: (item, expiry, cantidad) =>
         encolar(base({ kind: 'ajuste', barcode: item.barcode, name: item.name, expiry: expiry || '', qty: Math.max(0, cantidad) })),
 
-      renombrar: (barcode, name) =>
-        encolar(base({ kind: 'nombre', barcode, name, qty: 0 })),
+      // Sirve para corregir el nombre, para mover el producto de zona, o ambas.
+      renombrar: (barcode, name, zona) =>
+        encolar(base({ kind: 'nombre', barcode, name, zona, qty: 0 })),
 
       borrar: (item) =>
         encolar(base({ kind: 'borrar', barcode: item.barcode, name: item.name, qty: 0 })),

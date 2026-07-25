@@ -3,6 +3,7 @@
 const KEYS = {
   pin: 'botiquin_pin',
   who: 'botiquin_who',
+  zona: 'botiquin_zona',
   snapshot: 'botiquin_snapshot_v1',
   outbox: 'botiquin_outbox_v1'
 };
@@ -29,6 +30,8 @@ export const almacen = {
   setPin: (v) => write(KEYS.pin, v),
   who: () => read(KEYS.who, ''),
   setWho: (v) => write(KEYS.who, v),
+  zona: () => read(KEYS.zona, ''),
+  setZona: (v) => write(KEYS.zona, v),
   snapshot: () => read(KEYS.snapshot, { products: [], lots: [] }),
   setSnapshot: (v) => write(KEYS.snapshot, v),
   outbox: () => read(KEYS.outbox, []),
