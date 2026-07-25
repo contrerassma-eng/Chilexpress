@@ -1,0 +1,80 @@
+name: Deploy Botiquin a Cloudflare
+
+# Compila la PWA del botiquin y despliega el Worker (que sirve la app y /api/*).
+# Reutiliza el mismo secreto del repo que ya usa el Worker "superdelta":
+#   CLOUDFLARE_API_TOKEN  (token con permiso "Edit Cloudflare Workers" + D1:Edit)
+#
+# Para que la app funcione hace falta ademas el PIN del hogar:
+#   Settings > Secrets and variables > Actions > New repository secret
+#   Nombre: HOUSEHOLD_PIN   Valor: el PIN que escribiran en el telefono
+# Si el secreto no esta, el despliegue igual corre y la API responde 503 hasta
+# que lo agregues y vuelvas a lanzar el workflow.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/medicine-cabinet-inventory-app-mnkekt
+    paths:
+      - 'botiquin/**'
+      - '.github/workflows/deploy-botiquin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-botiquin
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Un secreto no se puede consultar directo en un `if`, asi que lo
+      # convertimos en booleano aca.
+      HAY_PIN: ${{ secrets.HOUSEHOLD_PIN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: botiquin/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: botiquin
+        run: npm ci
+
+      - name: Pruebas de logica
+        working-directory: botiquin
+        run: npm test
+
+      - name: Compilar la PWA
+        working-directory: botiquin
+        run: npm run build
+
+      - name: Desplegar el Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: botiquin
+          # Explicito: 'deploy' promueve la version a la deployment activa.
+          command: deploy
+
+      # Va despues del deploy a proposito: en el primer despliegue el Worker
+      # todavia no existe y `secret put` fallaria. El secreto aplica al toque,
+      # sin necesidad de volver a desplegar.
+      - name: Guardar el PIN del hogar como secreto del Worker
+        if: env.HAY_PIN == 'true'
+        working-directory: botiquin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          HOUSEHOLD_PIN: ${{ secrets.HOUSEHOLD_PIN }}
+        run: printf '%s' "$HOUSEHOLD_PIN" | npx wrangler secret put HOUSEHOLD_PIN
+
+      - name: Aviso si falta el PIN
+        if: env.HAY_PIN != 'true'
+        run: |
+          echo "::warning::Falta el secreto HOUSEHOLD_PIN del repo. La app queda desplegada, pero la API responde 503 hasta configurarlo y relanzar este workflow."

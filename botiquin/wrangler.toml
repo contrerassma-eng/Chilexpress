@@ -1,6 +1,8 @@
 name = "botiquin"
 main = "worker/index.js"
 compatibility_date = "2025-07-01"
+# Misma cuenta que usa el Worker "superdelta" del comparador de precios.
+account_id = "3e62b9fbc9cf3a2f7fcde7f0fbb7adb1"
 
 # El front (Vite) se sirve como assets estaticos desde el mismo Worker.
 # Solo /api/* pasa por el codigo del Worker; el resto lo resuelve el router de
