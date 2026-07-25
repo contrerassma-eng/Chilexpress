@@ -5,8 +5,8 @@
  * cola de movimientos pendientes. Como el id de cada movimiento lo genera el
  * telefono, reenviar la cola despues de estar sin señal nunca duplica stock.
  *
- * Rutas (todas piden la cabecera X-Pin):
- *   GET  /api/ping       -> valida el PIN
+ * Rutas (piden la cabecera X-Pin solo si hay PIN configurado):
+ *   GET  /api/ping       -> dice si el PIN sirve (o si no hace falta)
  *   GET  /api/state      -> inventario completo (productos + lotes)
  *   GET  /api/movements  -> ultimos movimientos
  *   POST /api/sync       -> aplica una tanda de movimientos
@@ -239,11 +239,11 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    if (!env.HOUSEHOLD_PIN) {
-      return json({ error: 'Falta configurar el PIN: npx wrangler secret put HOUSEHOLD_PIN' }, 503);
-    }
-
-    if (!sameSecret(request.headers.get('x-pin') || '', env.HOUSEHOLD_PIN)) {
+    // El PIN es opcional. Si el secreto HOUSEHOLD_PIN esta configurado se exige
+    // en cada peticion; si no esta, el botiquin queda abierto a quien tenga la
+    // direccion. Para volver a cerrarlo basta con crear el secreto:
+    //   npx wrangler secret put HOUSEHOLD_PIN
+    if (env.HOUSEHOLD_PIN && !sameSecret(request.headers.get('x-pin') || '', env.HOUSEHOLD_PIN)) {
       return json({ error: 'PIN incorrecto' }, 401);
     }
 

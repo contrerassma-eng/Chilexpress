@@ -20,6 +20,8 @@ pero acá el estado compartido vive en **Cloudflare D1** en vez de quedarse en e
 - **Historial**: quién agregó o sacó qué y cuándo.
 - **Sin señal**: la app abre igual, los movimientos quedan en cola y suben solos cuando
   vuelve internet. Cada movimiento lleva un id único, así que reintentar nunca duplica stock.
+- **Sin trámite de entrada**: se abre y ya está. Si se le pone PIN (ver más abajo), lo
+  pide una sola vez por teléfono.
 
 Lo que **no** hace, a propósito: recetas, dosis, recordatorios, usuarios, fotos.
 
@@ -37,28 +39,41 @@ Tres tablas: `products` (código → nombre), `lots` (un lote por fecha de venci
 
 ## Puesta en marcha
 
-La base D1 `botiquin` ya está creada y con las tablas aplicadas; su id ya está en
-`wrangler.toml`. Falta el PIN y el despliegue:
+Ya está desplegada en **https://botiquin.contreras-sma.workers.dev** y la base D1
+`botiquin` está creada con sus tablas (el id está en `wrangler.toml`).
+
+Cada push a `botiquin/**` la vuelve a desplegar solo, con el workflow
+`.github/workflows/deploy-botiquin.yml`, que reutiliza el secreto
+`CLOUDFLARE_API_TOKEN` del repo. A mano sería:
 
 ```bash
-cd botiquin
-npm install
+cd botiquin && npm install
 npx wrangler login
-
-# PIN del hogar: el que van a escribir en el teléfono. Usa 6 dígitos o más.
-npx wrangler secret put HOUSEHOLD_PIN
-
 npm run deploy
 ```
 
-Queda publicada en `https://botiquin.<tu-subdominio>.workers.dev`.
+## Acceso
 
-Sin el secreto `HOUSEHOLD_PIN` la API responde 503 a todo: nunca queda abierta por olvido.
+Hoy el botiquín está **abierto**: cualquiera con la dirección puede ver y modificar el
+inventario. Es lo más cómodo para la casa, y la dirección no está publicada en ninguna
+parte, pero tampoco es secreta: los dominios `workers.dev` se pueden rastrear.
 
-### Para cambiar el PIN
+Para ponerle un PIN, en cualquier momento y sin tocar código:
 
-`npx wrangler secret put HOUSEHOLD_PIN` de nuevo. Cada teléfono lo vuelve a pedir la
-próxima vez que sincronice.
+```bash
+npx wrangler secret put HOUSEHOLD_PIN     # 6 dígitos o más
+```
+
+Desde ese momento la API exige el PIN, la app lo pide una vez por teléfono y lo guarda.
+Para cambiarlo, el mismo comando otra vez. Para volver a abrirlo:
+
+```bash
+npx wrangler secret delete HOUSEHOLD_PIN
+```
+
+También se puede hacer desde el panel de Cloudflare (Workers → `botiquin` → Settings →
+Variables) o dejando el secreto `HOUSEHOLD_PIN` en el repo de GitHub, que el workflow lo
+sube en cada despliegue.
 
 ### Si alguna vez hay que recrear la base
 
@@ -98,7 +113,14 @@ red de la casa conviene desplegar directamente: es cosa de segundos.
 npm test          # logica pura: GS1, FEFO, cola offline, fechas (32 casos)
 
 npm run dev:api   # en otra consola
-npm run test:api  # la API real contra D1 local (23 casos)
+npm run test:api  # la API real contra D1 local
+```
+
+`test:api` detecta si el botiquín está abierto o con PIN y comprueba lo que corresponde
+a ese modo. También sirve contra el despliegue de verdad:
+
+```bash
+BASE=https://botiquin.contreras-sma.workers.dev npm run test:api
 ```
 
 ## Costo

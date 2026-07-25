@@ -4,11 +4,11 @@ name: Deploy Botiquin a Cloudflare
 # Reutiliza el mismo secreto del repo que ya usa el Worker "superdelta":
 #   CLOUDFLARE_API_TOKEN  (token con permiso "Edit Cloudflare Workers" + D1:Edit)
 #
-# Para que la app funcione hace falta ademas el PIN del hogar:
+# El PIN del hogar es opcional. Sin el, el botiquin queda abierto a quien tenga
+# la direccion, que es como esta hoy. Para cerrarlo, agrega el secreto del repo:
 #   Settings > Secrets and variables > Actions > New repository secret
 #   Nombre: HOUSEHOLD_PIN   Valor: el PIN que escribiran en el telefono
-# Si el secreto no esta, el despliegue igual corre y la API responde 503 hasta
-# que lo agregues y vuelvas a lanzar el workflow.
+# y vuelve a lanzar este workflow.
 
 on:
   push:
@@ -74,7 +74,7 @@ jobs:
           HOUSEHOLD_PIN: ${{ secrets.HOUSEHOLD_PIN }}
         run: printf '%s' "$HOUSEHOLD_PIN" | npx wrangler secret put HOUSEHOLD_PIN
 
-      - name: Aviso si falta el PIN
+      - name: Aviso de que el botiquin queda abierto
         if: env.HAY_PIN != 'true'
         run: |
-          echo "::warning::Falta el secreto HOUSEHOLD_PIN del repo. La app queda desplegada, pero la API responde 503 hasta configurarlo y relanzar este workflow."
+          echo "::warning::Sin el secreto HOUSEHOLD_PIN el botiquin queda abierto a cualquiera que tenga la direccion. Para cerrarlo, agrega ese secreto al repo y relanza este workflow."

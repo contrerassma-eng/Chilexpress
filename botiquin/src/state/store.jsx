@@ -86,8 +86,9 @@ export function StoreProvider({ children }) {
   useEffect(() => { almacen.setOutbox(state.outbox); }, [state.outbox]);
 
   const sincronizar = useCallback(async () => {
+    // El PIN puede ir vacio: si el Worker no tiene uno configurado, deja pasar.
     const { pin, outbox, who } = ref.current;
-    if (!pin || enCurso.current) return;
+    if (enCurso.current) return;
     enCurso.current = true;
     dispatch({ type: 'SYNC_INICIO' });
     try {
@@ -108,7 +109,6 @@ export function StoreProvider({ children }) {
 
   // Sube la cola apenas cambie algo, al volver la señal y al reabrir la app.
   useEffect(() => {
-    if (!state.pin) return undefined;
     sincronizar();
 
     const alVolver = () => sincronizar();

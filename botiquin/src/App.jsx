@@ -47,10 +47,14 @@ export default function App() {
     temporizador.current = window.setTimeout(() => setFlash(''), 2200);
   }
 
-  if (!b.state.pin || b.state.pinInvalido) {
+  // El botiquín entra directo. Solo pedimos PIN si el Worker lo exige, es decir
+  // si alguna petición volvió con 401 porque hay un PIN configurado.
+  if (b.state.pinInvalido) {
     return (
       <PinGate
-        aviso={b.state.pinInvalido ? 'Ese PIN no es el del hogar. Prueba otra vez.' : ''}
+        aviso={b.state.pin
+          ? 'Ese PIN no es el del hogar. Prueba otra vez.'
+          : 'Este botiquín está protegido con un PIN.'}
         onEntrar={(pin, quien) => { b.setPin(pin); b.setQuien(quien); }}
       />
     );
@@ -87,6 +91,13 @@ export default function App() {
     avisar(`${kind === 'descarte' ? 'Botados ' : '−'}${sacados} ${itemActivo.name}`);
   }
 
+  // Sin pantalla de PIN nadie pregunta el nombre, asi que queda a mano en el menu.
+  function cambiarQuien() {
+    setMenu(false);
+    const nombre = prompt('¿Quién usa este teléfono? Aparece en el historial.', b.state.who || '');
+    if (nombre !== null) b.setQuien(nombre.trim());
+  }
+
   async function instalar() {
     setMenu(false);
     if (instalador.current) {
@@ -117,8 +128,11 @@ export default function App() {
           <div className="menu" onClick={() => setMenu(false)}>
             <button onClick={instalar}>{sePuedeInstalar ? 'Instalar en el teléfono' : 'Cómo instalarla'}</button>
             <button onClick={() => { setMenu(false); b.sincronizar(); }}>Sincronizar ahora</button>
-            <button className="peligro" onClick={() => { if (confirm('¿Cerrar sesión en este teléfono?')) b.salir(); }}>
-              Salir y olvidar el PIN
+            <button onClick={cambiarQuien}>
+              Quién usa este teléfono{b.state.who ? `: ${b.state.who}` : ''}
+            </button>
+            <button className="peligro" onClick={() => { if (confirm('¿Borrar los datos guardados en este teléfono? El botiquín no se toca.')) b.salir(); }}>
+              Borrar datos de este teléfono
             </button>
           </div>
         )}

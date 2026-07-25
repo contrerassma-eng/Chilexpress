@@ -38,10 +38,19 @@ const stock = (estado, barcode) =>
 const lotes = (estado, barcode) => (estado.lots || []).filter((l) => l.barcode === barcode);
 const producto = (estado, barcode) => (estado.products || []).find((p) => p.barcode === barcode);
 
-console.log('\nSeguridad');
-await t('sin PIN -> 401', async () => assert.equal((await req('/api/ping', { pin: '' })).status, 401));
-await t('PIN malo -> 401', async () => assert.equal((await req('/api/ping', { pin: 'no-es' })).status, 401));
-await t('PIN bueno -> 200', async () => assert.equal((await req('/api/ping')).status, 200));
+// El PIN es opcional: depende de si el Worker tiene el secreto HOUSEHOLD_PIN.
+// Probamos el comportamiento que corresponde al modo en que este corriendo.
+const abierto = (await req('/api/ping', { pin: '' })).status === 200;
+
+console.log(`\nAcceso (el botiquin esta ${abierto ? 'ABIERTO, sin PIN' : 'CERRADO, con PIN'})`);
+if (abierto) {
+  await t('se entra sin PIN', async () => assert.equal((await req('/api/ping', { pin: '' })).status, 200));
+  await t('mandar un PIN cualquiera no estorba', async () => assert.equal((await req('/api/ping', { pin: 'da-igual' })).status, 200));
+} else {
+  await t('sin PIN -> 401', async () => assert.equal((await req('/api/ping', { pin: '' })).status, 401));
+  await t('PIN malo -> 401', async () => assert.equal((await req('/api/ping', { pin: 'no-es' })).status, 401));
+  await t('PIN bueno -> 200', async () => assert.equal((await req('/api/ping')).status, 200));
+}
 await t('ruta inventada -> 404', async () => assert.equal((await req('/api/nada')).status, 404));
 
 console.log('\nCompra');
