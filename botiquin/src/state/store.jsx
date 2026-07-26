@@ -169,6 +169,31 @@ export function StoreProvider({ children }) {
       renombrar: (barcode, name, zona) =>
         encolar(base({ kind: 'nombre', barcode, name, zona, qty: 0 })),
 
+      /**
+       * Le pone su codigo de barras a un producto que se habia guardado sin el
+       * (o con otro). Se resuelve con los movimientos que ya existen: se pasa
+       * el stock lote por lote al codigo nuevo y se borra la ficha vieja, asi
+       * funciona igual sin señal y sin logica nueva en el servidor.
+       */
+      vincular: (item, nuevoBarcode) => {
+        const movimientos = item.lotes.map((l) =>
+          base({
+            kind: 'compra',
+            barcode: nuevoBarcode,
+            name: item.name,
+            zona: item.zona,
+            expiry: l.expiry,
+            qty: l.qty
+          })
+        );
+        // Sin stock no hay lotes que mover, pero el nombre y la zona se conservan.
+        if (!movimientos.length) {
+          movimientos.push(base({ kind: 'nombre', barcode: nuevoBarcode, name: item.name, zona: item.zona, qty: 0 }));
+        }
+        movimientos.push(base({ kind: 'borrar', barcode: item.barcode, name: item.name, qty: 0 }));
+        encolar(...movimientos);
+      },
+
       borrar: (item) =>
         encolar(base({ kind: 'borrar', barcode: item.barcode, name: item.name, qty: 0 })),
 

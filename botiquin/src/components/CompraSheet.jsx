@@ -12,10 +12,12 @@ import { ZONA_POR_DEFECTO, listaZonas, zonaDe } from '../lib/zonas.js';
 export default function CompraSheet({
   barcode,
   item,
+  candidatos = [],
   expiryInicial = '',
   zonaActiva,
   avisoConsumo = false,
   onGuardar,
+  onVincular,
   onClose
 }) {
   // Un producto que ya existe no se mueve de zona solo: manda la suya.
@@ -25,6 +27,17 @@ export default function CompraSheet({
   const [expiry, setExpiry] = useState(expiryInicial);
 
   const puedeGuardar = nombre.trim().length > 0;
+
+  // Solo cuando el codigo es nuevo: puede que el producto ya este guardado sin
+  // codigo (se agregó a mano) o con otro. Mientras no escriba nada mostramos
+  // los que no tienen codigo, que son los candidatos naturales.
+  const esNuevo = !item && Boolean(barcode);
+  const busca = nombre.trim().toLowerCase();
+  const sugeridos = !esNuevo
+    ? []
+    : candidatos
+        .filter((c) => (busca ? c.name.toLowerCase().includes(busca) : c.barcode.startsWith('sc-')))
+        .slice(0, 6);
 
   function cambiarZona(nueva) {
     setZona(nueva);
@@ -92,6 +105,31 @@ export default function CompraSheet({
           {expiryInicial && <span className="opcional"> — leída del código</span>}
         </label>
         <Vencimiento key={zona} value={expiry} onChange={setExpiry} modoInicial={zonaDe(zona).fecha} />
+
+        {sugeridos.length > 0 && (
+          <div className="vincular">
+            <p className="pista">
+              {busca ? '¿Es alguno de estos que ya tienes?' : '¿Ya lo tienes guardado sin código?'}
+            </p>
+            <ul className="sugeridos">
+              {sugeridos.map((c) => (
+                <li key={c.barcode}>
+                  <button type="button" onClick={() => onVincular?.(c)}>
+                    <span className="sugeridos__texto">
+                      <strong>{c.name}</strong>
+                      <small>
+                        {zonaDe(c.zona).icono} {c.total > 0 ? `${c.total} guardados` : 'sin stock'}
+                        {c.barcode.startsWith('sc-') ? ' · sin código' : ` · ${c.barcode}`}
+                      </small>
+                    </span>
+                    <span className="sugeridos__accion">Es este</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="pista">Al elegirlo, este código queda pegado a ese producto y conserva su stock.</p>
+          </div>
+        )}
 
         {item && item.lotes.length > 0 && (
           <div className="ya-tienes">

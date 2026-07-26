@@ -8,7 +8,7 @@ import CompraSheet from './components/CompraSheet.jsx';
 import ConsumoSheet from './components/ConsumoSheet.jsx';
 import ProductoSheet from './components/ProductoSheet.jsx';
 import SelectorZona from './components/SelectorZona.jsx';
-import { codigoSinBarras } from './lib/codes.js';
+import { codigoSinBarras, variantesGtin } from './lib/codes.js';
 import { almacen } from './lib/storage.js';
 import { ZONA_POR_DEFECTO, zonaDe } from './lib/zonas.js';
 
@@ -68,19 +68,37 @@ export default function App() {
 
   const itemActivo = hoja ? b.byBarcode.get(hoja.barcode) : null;
 
+  // Un mismo envase puede leerse comprimido o expandido segun el lector, asi
+  // que probamos todas las formas equivalentes antes de darlo por desconocido.
+  function buscarPorCodigo(barcode) {
+    if (!barcode) return null;
+    for (const clave of variantesGtin(barcode)) {
+      const encontrado = b.byBarcode.get(clave);
+      if (encontrado) return encontrado;
+    }
+    return null;
+  }
+
   function alDetectar(dato) {
-    const item = dato.barcode ? b.byBarcode.get(dato.barcode) : null;
+    const item = buscarPorCodigo(dato.barcode);
+    // Si ya lo conociamos con otra variante del codigo, seguimos usando la suya.
+    const barcode = item ? item.barcode : dato.barcode;
     // En consumo, un codigo desconocido o sin stock se trata como alta nueva.
     if (modo === 'compra' || !item || item.total === 0) {
       setHoja({
         tipo: 'compra',
-        barcode: dato.barcode,
+        barcode,
         expiry: dato.expiry || '',
         avisoConsumo: modo === 'consumo'
       });
     } else {
-      setHoja({ tipo: 'consumo', barcode: dato.barcode });
+      setHoja({ tipo: 'consumo', barcode });
     }
+  }
+
+  function vincular(existente) {
+    b.vincular(existente, hoja.barcode);
+    avisar(`${existente.name} ahora tiene su código`);
   }
 
   function guardarCompra({ barcode, name, qty, expiry, zona: destino }) {
@@ -186,12 +204,17 @@ export default function App() {
 
       {hoja?.tipo === 'compra' && (
         <CompraSheet
+          // Al vincular, el producto pasa a ser conocido: la ficha se rehace
+          // sola con el nombre y la zona ya puestos.
+          key={itemActivo ? 'conocido' : 'nuevo'}
           barcode={hoja.barcode}
           item={itemActivo}
+          candidatos={b.items}
           expiryInicial={hoja.expiry}
           zonaActiva={zona}
           avisoConsumo={hoja.avisoConsumo}
           onGuardar={guardarCompra}
+          onVincular={vincular}
           onClose={() => setHoja(null)}
         />
       )}

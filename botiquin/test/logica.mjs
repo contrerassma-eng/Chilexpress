@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { parseGs1, gs1DateToIso, looksLikeGs1 } from '../src/lib/gs1.js';
-import { decodeScan, normalizeGtin, codigoSinBarras } from '../src/lib/codes.js';
+import { decodeScan, normalizeGtin, codigoSinBarras, upceAUpca, upcaAUpce, variantesGtin } from '../src/lib/codes.js';
 import { project, planConsumo, resumen } from '../src/lib/inventory.js';
 import { endOfMonth, isEndOfMonth, expiryState, fmtExpiry } from '../src/lib/format.js';
 import { ZONAS, zonaDe, esZona } from '../src/lib/zonas.js';
@@ -49,6 +49,44 @@ t('camara rechaza basura', () => {
 t('manual acepta lo que sea', () => assert.equal(decodeScan('caja-x', { strict: false }).barcode, 'CAJA-X'));
 t('codigo interno sin tildes', () => assert.equal(codigoSinBarras('Ibuprofeno 400 mg  ñandú'), 'sc-ibuprofeno-400-mg-nandu'));
 t('codigo interno se corta a 24', () => assert.ok(codigoSinBarras('a'.repeat(80)).length <= 27));
+
+console.log('\nUPC-E: el mismo envase leido comprimido o expandido');
+t('expande segun el digito de modo', () => {
+  // Par canonico de manual: modo 1
+  assert.equal(upceAUpca('04252614'), '042100005264');
+  // Modo 6 (5-9): los ceros van entre el fabricante y el ultimo digito.
+  // Es el caso de un producto real guardado comprimido.
+  assert.equal(upceAUpca('07322464'), '073224000064');
+  // Modo 3: cinco ceros despues de los tres primeros digitos.
+  assert.equal(upceAUpca('04210934'), '042100000094');
+});
+t('comprime de vuelta al mismo codigo', () => {
+  assert.ok(upcaAUpce('073224000064').includes('07322464'));
+});
+t('ida y vuelta para cualquier modo', () => {
+  for (const upce of ['07322464', '01230000', '04210934', '05012345', '01234565']) {
+    const upca = upceAUpca(upce);
+    if (!upca) continue;
+    assert.ok(upcaAUpce(upca).includes(upce), `${upce} -> ${upca} no vuelve`);
+  }
+});
+t('un codigo no comprimible no inventa variantes', () => {
+  assert.deepEqual(upcaAUpce('012345678905'), []);
+  assert.equal(upceAUpca('7801234'), '');   // largo invalido
+  assert.equal(upceAUpca('27322464'), '');  // no empieza en 0 ni 1
+});
+t('las variantes encuentran el producto guardado de otra forma', () => {
+  // Asi quedo guardado un producto real: comprimido, 8 digitos.
+  const guardado = '07322464';
+  // Si otro lector lo entrega expandido, tiene que reconocerlo igual.
+  assert.ok(variantesGtin('073224000064').includes(guardado));
+  assert.ok(variantesGtin('0073224000064').includes(guardado));
+  assert.ok(variantesGtin(guardado).includes('0073224000064'));
+});
+t('un EAN-13 normal no genera variantes raras', () => {
+  const v = variantesGtin('7800063004853');
+  assert.deepEqual(v, ['7800063004853']);
+});
 
 console.log('\nFechas');
 t('fin de mes', () => assert.equal(endOfMonth('2027-05'), '2027-05-31'));
