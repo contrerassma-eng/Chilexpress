@@ -276,12 +276,15 @@ input { background: var(--tarjeta); }
   aspect-ratio: 3 / 4;
 }
 .scanner__video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Coincide con el recorte que de verdad se decodifica (MIRA en el lector):
+   86% de ancho por 40% de alto. Si no coincidiera, el usuario apuntaria mal. */
 .scanner__mira {
   position: absolute;
-  inset: 22% 10%;
+  inset: 30% 7%;
   border: 3px solid rgba(255, 255, 255, .85);
   border-radius: 12px;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .28);
+  pointer-events: none;
 }
 .scanner__aviso {
   position: absolute;

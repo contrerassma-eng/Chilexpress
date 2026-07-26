@@ -64,6 +64,44 @@ export function upcaAUpce(a) {
 }
 
 /**
+ * Digito verificador de EAN-13 / EAN-8 / UPC-A.
+ *
+ * Regla unica: el digito mas a la derecha del cuerpo pesa 3, y de ahi
+ * alternando 1,3,1,3... hacia la izquierda.
+ */
+export function digitoVerificador(codigo) {
+  const cuerpo = String(codigo).slice(0, -1);
+  let suma = 0;
+  for (let i = cuerpo.length - 1; i >= 0; i -= 2) suma += cuerpo.charCodeAt(i) - 48;
+  suma *= 3;
+  for (let i = cuerpo.length - 2; i >= 0; i -= 2) suma += cuerpo.charCodeAt(i) - 48;
+  return (10 - (suma % 10)) % 10;
+}
+
+/**
+ * true  -> el codigo trae verificador y cuadra (se puede aceptar al toque)
+ * false -> trae verificador y NO cuadra (lectura mala, a la basura)
+ * null  -> no hay nada que verificar (Code-128 alfanumerico, DataMatrix GS1)
+ *
+ * Sirve para leer rapido sin perder precision: si el verificador cuadra basta
+ * una lectura, y solo cuando no hay como comprobar exigimos repetirla.
+ */
+export function validarCodigo(code) {
+  const s = String(code || '').trim();
+  if (!/^\d+$/.test(s)) return null;
+
+  // Un UPC-E se verifica sobre su forma expandida.
+  if (s.length === 8 && (s[0] === '0' || s[0] === '1')) {
+    const upca = upceAUpca(s);
+    if (upca && Number(upca[11]) === digitoVerificador(upca)) return true;
+    // Si no cuadra como UPC-E todavia puede ser un EAN-8 legitimo.
+  }
+
+  if (s.length !== 8 && s.length !== 12 && s.length !== 13) return null;
+  return Number(s[s.length - 1]) === digitoVerificador(s);
+}
+
+/**
  * Todas las claves con las que ese mismo producto pudo haberse guardado.
  * Se usa solo para buscar, no para guardar: asi un producto viejo anotado con
  * el codigo comprimido se sigue encontrando al escanearlo expandido.

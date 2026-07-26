@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { parseGs1, gs1DateToIso, looksLikeGs1 } from '../src/lib/gs1.js';
-import { decodeScan, normalizeGtin, codigoSinBarras, upceAUpca, upcaAUpce, variantesGtin } from '../src/lib/codes.js';
+import { decodeScan, normalizeGtin, codigoSinBarras, upceAUpca, upcaAUpce, variantesGtin, validarCodigo, digitoVerificador } from '../src/lib/codes.js';
 import { project, planConsumo, resumen } from '../src/lib/inventory.js';
 import { endOfMonth, isEndOfMonth, expiryState, fmtExpiry } from '../src/lib/format.js';
 import { ZONAS, zonaDe, esZona } from '../src/lib/zonas.js';
@@ -49,6 +49,36 @@ t('camara rechaza basura', () => {
 t('manual acepta lo que sea', () => assert.equal(decodeScan('caja-x', { strict: false }).barcode, 'CAJA-X'));
 t('codigo interno sin tildes', () => assert.equal(codigoSinBarras('Ibuprofeno 400 mg  ñandú'), 'sc-ibuprofeno-400-mg-nandu'));
 t('codigo interno se corta a 24', () => assert.ok(codigoSinBarras('a'.repeat(80)).length <= 27));
+
+console.log('\nDigito verificador (leer rapido sin perder precision)');
+t('acepta codigos reales de envases chilenos', () => {
+  // Sacados de cajas de verdad que estan en el inventario.
+  const reales = [
+    '7800007790309', '7806545000245', '7804614930875', '7800063004853',
+    '7800004006410', '7800006007545', '7800007158062', '7800007409249',
+    '7802900004118', '7803600031275', '7803960000652', '7807975005763',
+    '6953395538389', '0861728130130', '07322464'
+  ];
+  for (const c of reales) assert.equal(validarCodigo(c), true, `${c} deberia validar`);
+});
+t('rechaza una lectura con un digito cambiado', () => {
+  assert.equal(validarCodigo('7501031311309'), true);
+  assert.equal(validarCodigo('7501031311308'), false);
+  assert.equal(validarCodigo('7800063004850'), false);
+});
+t('calcula el verificador', () => {
+  assert.equal(digitoVerificador('7501031311309'), 9);
+  assert.equal(digitoVerificador('0861728130130'), 0);
+});
+t('sin verificador que comprobar devuelve null', () => {
+  assert.equal(validarCodigo('010775006000019417270531'), null); // DataMatrix GS1
+  assert.equal(validarCodigo('ABC-123'), null);                  // Code-128
+  assert.equal(validarCodigo('1234567890'), null);               // largo sin formato
+});
+t('el UPC-E se verifica sobre su forma expandida', () => {
+  assert.equal(validarCodigo('07322464'), true);
+  assert.equal(validarCodigo('07322461'), false);
+});
 
 console.log('\nUPC-E: el mismo envase leido comprimido o expandido');
 t('expande segun el digito de modo', () => {
