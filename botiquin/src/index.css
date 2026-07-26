@@ -243,6 +243,7 @@ input { background: var(--tarjeta); }
 .escaneo { display: grid; gap: 12px; }
 
 .segmentos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.segmentos--modo { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .segmentos--modo button {
   display: grid;
   gap: 2px;
@@ -252,12 +253,89 @@ input { background: var(--tarjeta); }
   background: var(--tarjeta);
   color: var(--suave);
 }
-.segmentos--modo strong { font-size: 1.05rem; }
-.segmentos--modo span { font-size: .78rem; }
+.segmentos--modo strong { font-size: .98rem; }
+.segmentos--modo span { font-size: .7rem; }
 .segmentos--modo .activo--compra { border-color: var(--verde); background: var(--verde); color: #fff; }
 .segmentos--modo .activo--consumo { border-color: #b45309; background: #b45309; color: #fff; }
+.segmentos--modo .activo--inventario { border-color: #4338ca; background: #4338ca; color: #fff; }
 
-.segmentos--chico { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+/* ---------- inventario fisico ---------- */
+
+.panel-inv {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--tarjeta);
+}
+.panel-inv__estado { display: flex; align-items: center; gap: 10px; }
+.panel-inv__estado > div { flex: 1; display: grid; }
+.panel-inv__estado small { color: var(--suave); font-size: .78rem; }
+
+.contadas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 34vh; overflow-y: auto; }
+.contadas li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+.contadas__qty { font-weight: 700; min-width: 28px; text-align: center; }
+.contadas__texto { flex: 1; display: grid; overflow: hidden; }
+.contadas__texto strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contadas__texto small { color: var(--suave); font-size: .76rem; }
+
+.cuadre {
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: calc(16px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));
+}
+.cuadre__cabecera { display: flex; align-items: flex-start; gap: 10px; }
+.cuadre__cabecera > div { flex: 1; }
+.cuadre__acciones { display: grid; gap: 8px; }
+
+.marcadores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.marcador {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--tarjeta);
+}
+.marcador strong { font-size: 1.5rem; }
+.marcador span { font-size: .76rem; color: var(--suave); text-align: center; }
+.marcador--sobra strong { color: var(--verde); }
+.marcador--falta strong { color: var(--rojo); }
+
+.difs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dif {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--borde);
+  border-radius: var(--radio);
+}
+.dif--sobra { border-left-color: var(--verde); }
+.dif--falta { border-left-color: var(--rojo); }
+.dif__texto { flex: 1; display: grid; overflow: hidden; }
+.dif__texto strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.dif__texto small { color: var(--suave); font-size: .76rem; }
+.dif__numeros { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: .88rem; }
+.dif__contado { font-weight: 700; color: var(--texto); }
+.dif__delta { font-weight: 700; min-width: 38px; text-align: right; }
+.dif--sobra .dif__delta { color: var(--verde); }
+.dif--falta .dif__delta { color: var(--rojo); }
+
+.segmentos--chico { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
 .segmentos--chico button {
   padding: 9px 6px;
   font-size: .82rem;
@@ -552,3 +630,6 @@ input { background: var(--tarjeta); }
   font-size: .88rem;
 }
 .alerta--error { background: #fee2e2; color: #991b1b; }
+
+.detalle-inv { display: grid; gap: 12px; }
+.detalle-inv h3 { font-size: 1.05rem; }

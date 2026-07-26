@@ -34,5 +34,8 @@ export const api = {
   ping: (pin) => call('/api/ping', { pin }),
   state: (pin) => call('/api/state', { pin }),
   movements: (pin, limit = 60) => call(`/api/movements?limit=${limit}`, { pin }),
-  sync: (pin, movements, who) => call('/api/sync', { pin, method: 'POST', body: { movements, who } })
+  sync: (pin, movements, who, stocktakes = []) =>
+    call('/api/sync', { pin, method: 'POST', body: { movements, who, stocktakes } }),
+  stocktakes: (pin, limit = 30) => call(`/api/stocktakes?limit=${limit}`, { pin }),
+  stocktake: (pin, id) => call(`/api/stocktake?id=${encodeURIComponent(id)}`, { pin })
 };

@@ -4,6 +4,8 @@ import { decodeScan, normalizeGtin, codigoSinBarras, upceAUpca, upcaAUpce, varia
 import { project, planConsumo, resumen } from '../src/lib/inventory.js';
 import { endOfMonth, isEndOfMonth, expiryState, fmtExpiry } from '../src/lib/format.js';
 import { ZONAS, zonaDe, esZona } from '../src/lib/zonas.js';
+import { cuadrar } from '../src/lib/conteo.js';
+import { armarCsv } from '../src/lib/csv.js';
 
 let ok = 0;
 const t = (nombre, fn) => { fn(); ok += 1; console.log('  ok  ' + nombre); };
@@ -302,6 +304,90 @@ t('el resumen separa por zona', () => {
   assert.equal(r.porZona.despensa.vencidos, 1);
   assert.equal(r.porZona.despensa.agotados, 1);
   assert.equal(r.porZona.aseo.total, 0);
+});
+
+console.log('\nInventario fisico (lo contado manda)');
+const casa = {
+  products: [
+    { barcode: 'a', name: 'Paracetamol', zona: 'botiquin' },
+    { barcode: 'b', name: 'Arroz', zona: 'despensa' },
+    { barcode: 'c', name: 'Cloro', zona: 'aseo' }
+  ],
+  lots: [
+    { barcode: 'a', expiry: '2027-05-31', qty: 10 },
+    { barcode: 'b', expiry: '', qty: 4 },
+    { barcode: 'c', expiry: '', qty: 2 }
+  ]
+};
+const proy = project(casa, []);
+
+t('lo contado reemplaza, no suma', () => {
+  const conteo = { 'a|2027-05-31': { barcode: 'a', expiry: '2027-05-31', contado: 7 } };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'botiquin' });
+  const linea = c.lineas.find((l) => l.barcode === 'a');
+  assert.equal(linea.antes, 10);
+  assert.equal(linea.contado, 7);
+  assert.equal(c.faltantes, 3);
+  assert.equal(c.sobras, 0);
+});
+
+t('lo que no se conto queda en cero', () => {
+  // Inventario de toda la casa contando solo el arroz: el resto no estaba.
+  const conteo = { 'b|': { barcode: 'b', expiry: '', contado: 4 } };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'todas' });
+  assert.equal(c.lineas.length, 3);
+  assert.equal(c.lineas.find((l) => l.barcode === 'a').contado, 0);
+  assert.equal(c.lineas.find((l) => l.barcode === 'c').contado, 0);
+  assert.equal(c.faltantes, 12); // 10 del paracetamol + 2 del cloro
+});
+
+t('un inventario de una zona no toca las otras', () => {
+  const conteo = { 'b|': { barcode: 'b', expiry: '', contado: 1 } };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'despensa' });
+  assert.equal(c.lineas.length, 1);
+  assert.equal(c.lineas[0].barcode, 'b');
+  assert.equal(c.faltantes, 3);
+});
+
+t('un producto que aparece y no estaba registrado suma de mas', () => {
+  const conteo = { 'z|': { barcode: 'z', name: 'Encontrado', zona: 'despensa', expiry: '', contado: 5 } };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'despensa' });
+  const nuevo = c.lineas.find((l) => l.barcode === 'z');
+  assert.equal(nuevo.antes, 0);
+  assert.equal(nuevo.contado, 5);
+  assert.equal(c.sobras, 5);
+});
+
+t('si todo coincide, cuadra', () => {
+  const conteo = {
+    'a|2027-05-31': { barcode: 'a', expiry: '2027-05-31', contado: 10 },
+    'b|': { barcode: 'b', expiry: '', contado: 4 },
+    'c|': { barcode: 'c', expiry: '', contado: 2 }
+  };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'todas' });
+  assert.equal(c.cuadra, true);
+  assert.equal(c.diferencias.length, 0);
+});
+
+t('contar un lote nuevo del mismo producto no borra el otro', () => {
+  const conteo = {
+    'a|2027-05-31': { barcode: 'a', expiry: '2027-05-31', contado: 10 },
+    'a|2028-01-31': { barcode: 'a', expiry: '2028-01-31', contado: 6 }
+  };
+  const c = cuadrar({ items: proy.items, byBarcode: proy.byBarcode, conteo, zona: 'botiquin' });
+  assert.equal(c.lineas.length, 2);
+  assert.equal(c.sobras, 6);
+  assert.equal(c.faltantes, 0);
+});
+
+console.log('\nCSV');
+t('escapa comillas y separadores', () => {
+  const csv = armarCsv(['a', 'b'], [['di "hola"', 'uno;dos']]);
+  assert.ok(csv.includes('"di ""hola"""'));
+  assert.ok(csv.includes('"uno;dos"'));
+});
+t('parte con BOM para que Excel lo abra bien', () => {
+  assert.equal(armarCsv(['x'], [])[0], '﻿');
 });
 
 console.log(`\n${ok} pruebas OK\n`);

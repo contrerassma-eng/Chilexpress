@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { almacen } from '../lib/storage.js';
 import { api } from '../lib/api.js';
 import { planConsumo, project, resumen } from '../lib/inventory.js';
+import { claveLinea } from '../lib/conteo.js';
 import { nowIso, uid } from '../lib/format.js';
 
 /**
@@ -21,6 +22,8 @@ function initState() {
     who: almacen.who(),
     snapshot: almacen.snapshot(),
     outbox: almacen.outbox(),
+    inventario: almacen.inventario(),   // conteo en curso, si lo hay
+    actas: almacen.actas(),             // inventarios cerrados sin subir
     sync: 'idle',          // idle | sincronizando | ok | sin-conexion | error
     error: '',
     pinInvalido: false,
@@ -42,11 +45,40 @@ function reducer(state, action) {
     case 'SYNC_INICIO':
       return { ...state, sync: 'sincronizando', error: '' };
 
+    case 'INICIAR_INVENTARIO':
+      return { ...state, inventario: action.inventario };
+
+    case 'CONTAR': {
+      if (!state.inventario) return state;
+      const conteo = { ...state.inventario.conteo, [action.clave]: action.linea };
+      return { ...state, inventario: { ...state.inventario, conteo } };
+    }
+
+    case 'BORRAR_LINEA': {
+      if (!state.inventario) return state;
+      const conteo = { ...state.inventario.conteo };
+      delete conteo[action.clave];
+      return { ...state, inventario: { ...state.inventario, conteo } };
+    }
+
+    case 'CANCELAR_INVENTARIO':
+      return { ...state, inventario: null };
+
+    case 'CERRAR_INVENTARIO':
+      return {
+        ...state,
+        inventario: null,
+        outbox: [...state.outbox, ...action.movimientos],
+        actas: [...state.actas, action.acta]
+      };
+
     case 'SYNC_OK': {
       const aplicados = new Set(action.aplicados || []);
+      const guardadas = new Set(action.actas || []);
       return {
         ...state,
         snapshot: action.snapshot,
+        actas: state.actas.filter((a) => !guardadas.has(a.id)),
         outbox: state.outbox.filter((m) => !aplicados.has(m.id)),
         sync: 'ok',
         error: '',
@@ -84,18 +116,26 @@ export function StoreProvider({ children }) {
   useEffect(() => { almacen.setWho(state.who); }, [state.who]);
   useEffect(() => { almacen.setSnapshot(state.snapshot); }, [state.snapshot]);
   useEffect(() => { almacen.setOutbox(state.outbox); }, [state.outbox]);
+  useEffect(() => { almacen.setInventario(state.inventario); }, [state.inventario]);
+  useEffect(() => { almacen.setActas(state.actas); }, [state.actas]);
 
   const sincronizar = useCallback(async () => {
     // El PIN puede ir vacio: si el Worker no tiene uno configurado, deja pasar.
-    const { pin, outbox, who } = ref.current;
+    const { pin, outbox, who, actas } = ref.current;
     if (enCurso.current) return;
     enCurso.current = true;
     dispatch({ type: 'SYNC_INICIO' });
     try {
       const enviando = outbox.slice(0, 200);
-      if (enviando.length) {
-        const data = await api.sync(pin, enviando, who);
-        dispatch({ type: 'SYNC_OK', snapshot: data.state, aplicados: data.applied || [] });
+      const enviandoActas = actas.slice(0, 10);
+      if (enviando.length || enviandoActas.length) {
+        const data = await api.sync(pin, enviando, who, enviandoActas);
+        dispatch({
+          type: 'SYNC_OK',
+          snapshot: data.state,
+          aplicados: data.applied || [],
+          actas: data.stocktakes || []
+        });
       } else {
         const data = await api.state(pin);
         dispatch({ type: 'SYNC_OK', snapshot: data, aplicados: [] });
@@ -122,7 +162,7 @@ export function StoreProvider({ children }) {
       document.removeEventListener('visibilitychange', alMostrar);
       window.clearInterval(timer);
     };
-  }, [state.pin, state.outbox.length, sincronizar]);
+  }, [state.pin, state.outbox.length, state.actas.length, sincronizar]);
 
   const { items, byBarcode } = useMemo(
     () => project(state.snapshot, state.outbox),
@@ -197,6 +237,50 @@ export function StoreProvider({ children }) {
       borrar: (item) =>
         encolar(base({ kind: 'borrar', barcode: item.barcode, name: item.name, qty: 0 })),
 
+      // --- Inventario fisico ---
+
+      iniciarInventario: (zona) =>
+        dispatch({
+          type: 'INICIAR_INVENTARIO',
+          inventario: { id: uid(), zona: zona || 'todas', iniciado: nowIso(), conteo: {} }
+        }),
+
+      contar: (linea) =>
+        dispatch({ type: 'CONTAR', clave: claveLinea(linea.barcode, linea.expiry), linea }),
+
+      borrarLinea: (clave) => dispatch({ type: 'BORRAR_LINEA', clave }),
+
+      cancelarInventario: () => dispatch({ type: 'CANCELAR_INVENTARIO' }),
+
+      /**
+       * Cierra el conteo: deja el stock igual a lo contado y guarda el acta con
+       * la fecha y todas las diferencias. Los ajustes viajan como movimientos
+       * normales, asi que se puede cerrar sin señal.
+       */
+      cerrarInventario: (cuadre) => {
+        const inv = ref.current.inventario;
+        if (!inv) return;
+        const movimientos = cuadre.diferencias.map((l) =>
+          base({ kind: 'ajuste', barcode: l.barcode, name: l.name, zona: l.zona, expiry: l.expiry, qty: l.contado })
+        );
+        const acta = {
+          id: inv.id,
+          zona: inv.zona === 'todas' ? '' : inv.zona,
+          started_at: inv.iniciado,
+          closed_at: nowIso(),
+          who: ref.current.who || '',
+          lines: cuadre.lineas.map((l) => ({
+            barcode: l.barcode,
+            name: l.name,
+            zona: l.zona,
+            expiry: l.expiry,
+            antes: l.antes,
+            contado: l.contado
+          }))
+        };
+        dispatch({ type: 'CERRAR_INVENTARIO', movimientos, acta });
+      },
+
       setPin: (pin) => dispatch({ type: 'PIN', pin }),
       setQuien: (who) => dispatch({ type: 'QUIEN', who }),
       salir: () => { almacen.borrarTodo(); dispatch({ type: 'SALIR' }); },
@@ -205,7 +289,15 @@ export function StoreProvider({ children }) {
   }, [sincronizar]);
 
   const value = useMemo(
-    () => ({ state, items, byBarcode, totales, pendientes: state.outbox.length, ...acciones }),
+    () => ({
+      state,
+      items,
+      byBarcode,
+      totales,
+      inventario: state.inventario,
+      pendientes: state.outbox.length + state.actas.length,
+      ...acciones
+    }),
     [state, items, byBarcode, totales, acciones]
   );
 

@@ -8,9 +8,13 @@ import CompraSheet from './components/CompraSheet.jsx';
 import ConsumoSheet from './components/ConsumoSheet.jsx';
 import ProductoSheet from './components/ProductoSheet.jsx';
 import SelectorZona from './components/SelectorZona.jsx';
+import ContarSheet from './components/ContarSheet.jsx';
+import CuadreView from './components/CuadreView.jsx';
 import { codigoSinBarras, variantesGtin } from './lib/codes.js';
 import { almacen } from './lib/storage.js';
 import { ZONA_POR_DEFECTO, zonaDe } from './lib/zonas.js';
+import { claveLinea, cuadrar } from './lib/conteo.js';
+import { descargarCsv, marcaDeTiempo } from './lib/csv.js';
 
 const ESTADO_SYNC = {
   idle: { texto: 'conectando', clase: 'espera' },
@@ -29,6 +33,7 @@ export default function App() {
   const [hoja, setHoja] = useState(null);
   const [flash, setFlash] = useState('');
   const [menu, setMenu] = useState(false);
+  const [cuadre, setCuadre] = useState(null);
   const instalador = useRef(null);
   const [sePuedeInstalar, setSePuedeInstalar] = useState(false);
   const temporizador = useRef(0);
@@ -83,6 +88,10 @@ export default function App() {
     const item = buscarPorCodigo(dato.barcode);
     // Si ya lo conociamos con otra variante del codigo, seguimos usando la suya.
     const barcode = item ? item.barcode : dato.barcode;
+    if (modo === 'inventario') {
+      setHoja({ tipo: 'contar', barcode, expiry: dato.expiry || '' });
+      return;
+    }
     // En consumo, un codigo desconocido o sin stock se trata como alta nueva.
     if (modo === 'compra' || !item || item.total === 0) {
       setHoja({
@@ -115,6 +124,42 @@ export default function App() {
     avisar(`${kind === 'descarte' ? 'Botados ' : '−'}${sacados} ${itemActivo.name}`);
   }
 
+  function anotarConteo(linea) {
+    b.contar(linea);
+    setHoja(null);
+    avisar(`${linea.name}: ${linea.contado}`);
+  }
+
+  function terminarInventario() {
+    setCuadre(cuadrar({
+      items: b.items,
+      byBarcode: b.byBarcode,
+      conteo: b.inventario?.conteo || {},
+      zona: b.inventario?.zona || 'todas'
+    }));
+  }
+
+  function confirmarInventario() {
+    b.cerrarInventario(cuadre);
+    const dif = cuadre.diferencias.length;
+    setCuadre(null);
+    setModo('compra');
+    avisar(dif ? `Inventario aplicado · ${dif} diferencia(s)` : 'Inventario aplicado · todo cuadraba');
+  }
+
+  function exportarInventario() {
+    setMenu(false);
+    descargarCsv(
+      `inventario_${marcaDeTiempo()}.csv`,
+      ['Producto', 'Codigo', 'Zona', 'Vence', 'Cantidad', 'Estado'],
+      b.items.flatMap((i) => (
+        i.lotes.length
+          ? i.lotes.map((l) => [i.name, i.barcode, zonaDe(i.zona).nombre, l.expiry || 'sin fecha', l.qty, i.estado])
+          : [[i.name, i.barcode, zonaDe(i.zona).nombre, '', 0, 'agotado']]
+      ))
+    );
+  }
+
   // Sin pantalla de PIN nadie pregunta el nombre, asi que queda a mano en el menu.
   function cambiarQuien() {
     setMenu(false);
@@ -139,6 +184,25 @@ export default function App() {
 
   const sync = ESTADO_SYNC[b.state.sync] || ESTADO_SYNC.idle;
 
+  if (cuadre) {
+    return (
+      <CuadreView
+        cuadre={cuadre}
+        zona={b.inventario?.zona || 'todas'}
+        iniciado={b.inventario?.iniciado}
+        onConfirmar={confirmarInventario}
+        onSeguir={() => setCuadre(null)}
+        onCancelar={() => {
+          if (confirm('¿Descartar el conteo? No se aplica ningún cambio al stock.')) {
+            b.cancelarInventario();
+            setCuadre(null);
+            setModo('compra');
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <header className="barra">
@@ -152,6 +216,7 @@ export default function App() {
           <div className="menu" onClick={() => setMenu(false)}>
             <button onClick={instalar}>{sePuedeInstalar ? 'Instalar en el teléfono' : 'Cómo instalarla'}</button>
             <button onClick={() => { setMenu(false); b.sincronizar(); }}>Sincronizar ahora</button>
+            <button onClick={exportarInventario}>Exportar inventario (CSV)</button>
             <button onClick={cambiarQuien}>
               Quién usa este teléfono{b.state.who ? `: ${b.state.who}` : ''}
             </button>
@@ -178,8 +243,12 @@ export default function App() {
             modo={modo}
             setModo={setModo}
             onDetectado={alDetectar}
-            pausado={!!hoja}
+            pausado={!!hoja || !!cuadre}
             zona={zona}
+            inventario={b.inventario}
+            onIniciarInventario={b.iniciarInventario}
+            onTerminarInventario={terminarInventario}
+            onBorrarLinea={b.borrarLinea}
           />
         )}
         {tab === 'inventario' && (
@@ -215,6 +284,18 @@ export default function App() {
           avisoConsumo={hoja.avisoConsumo}
           onGuardar={guardarCompra}
           onVincular={vincular}
+          onClose={() => setHoja(null)}
+        />
+      )}
+
+      {hoja?.tipo === 'contar' && (
+        <ContarSheet
+          barcode={hoja.barcode}
+          item={itemActivo}
+          expiryInicial={hoja.expiry}
+          zonaActiva={b.inventario?.zona || zona}
+          yaContado={b.inventario?.conteo?.[claveLinea(hoja.barcode, hoja.expiry)]}
+          onContar={anotarConteo}
           onClose={() => setHoja(null)}
         />
       )}

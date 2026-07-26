@@ -6,10 +6,12 @@
  * telefono, reenviar la cola despues de estar sin señal nunca duplica stock.
  *
  * Rutas (piden la cabecera X-Pin solo si hay PIN configurado):
- *   GET  /api/ping       -> dice si el PIN sirve (o si no hace falta)
- *   GET  /api/state      -> inventario completo (productos + lotes)
- *   GET  /api/movements  -> ultimos movimientos
- *   POST /api/sync       -> aplica una tanda de movimientos
+ *   GET  /api/ping        -> dice si el PIN sirve (o si no hace falta)
+ *   GET  /api/state       -> inventario completo (productos + lotes)
+ *   GET  /api/movements   -> ultimos movimientos
+ *   GET  /api/stocktakes  -> inventarios fisicos cerrados
+ *   GET  /api/stocktake   -> un inventario con todas sus diferencias
+ *   POST /api/sync        -> aplica movimientos y guarda inventarios cerrados
  *
  * Todo cambio (comprar, consumir, renombrar, borrar) es un movimiento, asi que
  * todo se puede hacer sin señal y se sube despues.
@@ -208,6 +210,62 @@ async function applyMovements(env, raw, who) {
   return ids;
 }
 
+/**
+ * Guarda inventarios fisicos ya cerrados. El id lo genera el telefono, asi que
+ * reenviar la cola no vuelve a guardarlo. El stock ya viene ajustado por los
+ * movimientos que van en la misma tanda; aca solo queda el acta: fecha, quien
+ * y todas las diferencias.
+ */
+async function guardarInventarios(env, raw, who) {
+  const guardados = [];
+
+  for (const s of raw) {
+    const id = str(s?.id, 60);
+    if (!id) continue;
+    guardados.push(id);
+
+    const yaEsta = await env.DB.prepare('SELECT id FROM stocktakes WHERE id = ?1').bind(id).first();
+    if (yaEsta) continue;
+
+    const zona = str(s?.zona, 20);
+    const lineas = (Array.isArray(s?.lines) ? s.lines : []).slice(0, 500);
+
+    let sobras = 0;
+    let faltantes = 0;
+    const stmts = [];
+
+    for (const l of lineas) {
+      const barcode = str(l?.barcode, 60);
+      if (!barcode) continue;
+      const antes = nonNegInt(l?.antes);
+      const contado = nonNegInt(l?.contado);
+      const diferencia = contado - antes;
+      if (diferencia > 0) sobras += diferencia;
+      else faltantes += -diferencia;
+
+      stmts.push(
+        env.DB.prepare(
+          `INSERT OR REPLACE INTO stocktake_lines
+             (stocktake_id, barcode, name, zona, expiry, antes, contado)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+        ).bind(id, barcode, str(l?.name, 120), str(l?.zona, 20), expiryOf(l?.expiry), antes, contado)
+      );
+    }
+
+    stmts.unshift(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO stocktakes
+           (id, zona, started_at, closed_at, who, contados, sobras, faltantes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+      ).bind(id, zona, isoOf(s?.started_at), isoOf(s?.closed_at), str(s?.who || who, 40), lineas.length, sobras, faltantes)
+    );
+
+    await env.DB.batch(stmts);
+  }
+
+  return guardados;
+}
+
 async function handle(request, env, url) {
   const path = url.pathname;
 
@@ -228,11 +286,37 @@ async function handle(request, env, url) {
     return json({ movements: results ?? [] });
   }
 
+  if (path === '/api/stocktakes' && request.method === 'GET') {
+    const limit = Math.min(Math.max(nonNegInt(url.searchParams.get('limit')) || 30, 1), 100);
+    const { results } = await env.DB
+      .prepare('SELECT id, zona, started_at, closed_at, who, contados, sobras, faltantes FROM stocktakes ORDER BY closed_at DESC LIMIT ?1')
+      .bind(limit)
+      .all();
+    return json({ stocktakes: results ?? [] });
+  }
+
+  if (path === '/api/stocktake' && request.method === 'GET') {
+    const id = str(url.searchParams.get('id'), 60);
+    if (!id) return json({ error: 'falta el id' }, 400);
+    const [cabecera, lineas] = await env.DB.batch([
+      env.DB.prepare('SELECT id, zona, started_at, closed_at, who, contados, sobras, faltantes FROM stocktakes WHERE id = ?1').bind(id),
+      env.DB.prepare('SELECT barcode, name, zona, expiry, antes, contado FROM stocktake_lines WHERE stocktake_id = ?1 ORDER BY name').bind(id)
+    ]);
+    const info = cabecera.results?.[0];
+    if (!info) return json({ error: 'no existe' }, 404);
+    return json({ stocktake: info, lines: lineas.results ?? [] });
+  }
+
   if (path === '/api/sync' && request.method === 'POST') {
     const body = await request.json().catch(() => null);
-    const list = Array.isArray(body?.movements) ? body.movements.slice(0, 200) : [];
-    const applied = await applyMovements(env, list, str(body?.who, 40));
-    return json({ applied, state: await readState(env) });
+    const quien = str(body?.who, 40);
+    const list = Array.isArray(body?.movements) ? body.movements.slice(0, 500) : [];
+    const applied = await applyMovements(env, list, quien);
+    // Los inventarios van despues: el stock ya quedo ajustado por los
+    // movimientos de la misma tanda.
+    const inventarios = Array.isArray(body?.stocktakes) ? body.stocktakes.slice(0, 20) : [];
+    const stocktakes = await guardarInventarios(env, inventarios, quien);
+    return json({ applied, stocktakes, state: await readState(env) });
   }
 
   return json({ error: 'ruta desconocida' }, 404);

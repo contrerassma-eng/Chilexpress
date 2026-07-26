@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "deploy": "npm run build && wrangler deploy",
-    "db:init": "wrangler d1 execute botiquin --remote --file=./migrations/0001_init.sql && wrangler d1 execute botiquin --remote --file=./migrations/0002_zonas.sql",
+    "db:init": "wrangler d1 execute botiquin --remote --file=./migrations/0001_init.sql && wrangler d1 execute botiquin --remote --file=./migrations/0002_zonas.sql && wrangler d1 execute botiquin --remote --file=./migrations/0003_inventarios.sql",
     "test": "node test/logica.mjs",
     "test:api": "node test/api.mjs"
   },

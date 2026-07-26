@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import BarcodeScanner from './BarcodeScanner.jsx';
 import { decodeScan } from '../lib/codes.js';
 import { zonaDe } from '../lib/zonas.js';
+import InventarioFisico from './InventarioFisico.jsx';
 
 function pitido() {
   try {
@@ -20,7 +21,17 @@ function pitido() {
 }
 
 /** Pantalla principal: elegir modo, escanear y caer al formulario que toca. */
-export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) {
+export default function ScanView({
+  modo,
+  setModo,
+  onDetectado,
+  pausado,
+  zona,
+  inventario,
+  onIniciarInventario,
+  onTerminarInventario,
+  onBorrarLinea
+}) {
   const [camara, setCamara] = useState(false);
   const [manual, setManual] = useState('');
   const [ilegible, setIlegible] = useState(false);
@@ -66,7 +77,26 @@ export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) 
           <strong>Consumo</strong>
           <span>saca del stock</span>
         </button>
+        <button
+          role="tab"
+          aria-selected={modo === 'inventario'}
+          className={modo === 'inventario' ? 'activo activo--inventario' : ''}
+          onClick={() => setModo('inventario')}
+        >
+          <strong>Inventario</strong>
+          <span>cuenta lo real</span>
+        </button>
       </div>
+
+      {modo === 'inventario' && (
+        <InventarioFisico
+          inventario={inventario}
+          zona={zona}
+          onIniciar={onIniciarInventario}
+          onTerminar={onTerminarInventario}
+          onBorrar={onBorrarLinea}
+        />
+      )}
 
       {modo === 'compra' && (
         <p className="pista pista--centro">
@@ -76,7 +106,7 @@ export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) 
         </p>
       )}
 
-      {camara ? (
+      {modo === 'inventario' && !inventario ? null : camara ? (
         <>
           <BarcodeScanner active={camara && !pausado} onScan={alLeer} onError={() => {}} />
           {ilegible && <p className="pista pista--centro">Código no reconocido. Acércalo o escríbelo abajo.</p>}
@@ -88,6 +118,7 @@ export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) 
         </button>
       )}
 
+      {(modo !== 'inventario' || inventario) && (
       <form className="manual" onSubmit={enviarManual}>
         <input
           type="text"
@@ -98,6 +129,7 @@ export default function ScanView({ modo, setModo, onDetectado, pausado, zona }) 
         />
         <button className="btn" type="submit" disabled={!manual.trim()}>Ir</button>
       </form>
+      )}
 
       {modo === 'compra' && (
         <button className="btn btn--enlace" onClick={() => onDetectado({ barcode: '', expiry: '', fuente: 'sin-codigo' })}>

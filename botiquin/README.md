@@ -37,7 +37,13 @@ quedó en el botiquín.
 - **Inventario**: por zona o todo junto, con buscador y filtros de *por vencer*,
   *vencidos* y *por comprar*. Lo agotado queda guardado, así reconoce el código en la
   próxima compra y de paso sirve de lista de compras.
-- **Historial**: quién agregó o sacó qué, cuándo y de qué zona.
+- **Inventario físico**: cuenta lo que hay de verdad. Lo contado reemplaza lo registrado
+  (si un producto no aparece en el conteo, queda en cero) y al terminar muestra el
+  descuadre: qué sobra, qué falta y qué no apareció. Se puede contar una zona o la casa
+  entera, en varias sentadas, y queda guardado con su fecha y todas las diferencias.
+- **Historial**: quién agregó o sacó qué, cuándo y de qué zona, más los inventarios
+  hechos con su descuadre.
+- **Exportar CSV**: el inventario actual, los movimientos y cualquier inventario físico.
 - **Sin señal**: la app abre igual, los movimientos quedan en cola y suben solos cuando
   vuelve internet. Cada movimiento lleva un id único, así que reintentar nunca duplica stock.
 - **Sin trámite de entrada**: se abre y ya está. Si se le pone PIN (ver más abajo), lo
@@ -54,8 +60,9 @@ Lo que **no** hace, a propósito: recetas, dosis, recordatorios, usuarios, fotos
 | `migrations/` | Esquema de D1, ya aplicado en la base |
 | `wrangler.toml` | Un solo Worker sirve la app y `/api/*` |
 
-Tres tablas: `products` (código → nombre y zona), `lots` (un lote por fecha de
-vencimiento) y `movements` (bitácora + control de duplicados). El stock de un producto es
+Tablas: `products` (código → nombre y zona), `lots` (un lote por fecha de vencimiento),
+`movements` (bitácora + control de duplicados) y `stocktakes` / `stocktake_lines` (las
+actas de los inventarios físicos con todas sus diferencias). El stock de un producto es
 la suma de sus lotes.
 
 Para recrear la base desde cero hay que aplicar las migraciones en orden:
@@ -63,6 +70,7 @@ Para recrear la base desde cero hay que aplicar las migraciones en orden:
 ```bash
 npx wrangler d1 execute botiquin --remote --file=./migrations/0001_init.sql
 npx wrangler d1 execute botiquin --remote --file=./migrations/0002_zonas.sql
+npx wrangler d1 execute botiquin --remote --file=./migrations/0003_inventarios.sql
 ```
 
 ## Puesta en marcha
@@ -138,7 +146,7 @@ red de la casa conviene desplegar directamente: es cosa de segundos.
 ## Pruebas
 
 ```bash
-npm test          # logica pura: GS1, FEFO, cola offline, fechas, zonas (40 casos)
+npm test          # logica pura: GS1, verificador, FEFO, zonas, conteo, CSV (59 casos)
 
 npm run dev:api   # en otra consola
 npm run test:api  # la API real contra D1 local

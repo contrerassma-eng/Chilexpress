@@ -5,7 +5,9 @@ const KEYS = {
   who: 'botiquin_who',
   zona: 'botiquin_zona',
   snapshot: 'botiquin_snapshot_v1',
-  outbox: 'botiquin_outbox_v1'
+  outbox: 'botiquin_outbox_v1',
+  inventario: 'botiquin_inventario_v1',
+  actas: 'botiquin_actas_v1'
 };
 
 function read(key, fallback) {
@@ -36,6 +38,12 @@ export const almacen = {
   setSnapshot: (v) => write(KEYS.snapshot, v),
   outbox: () => read(KEYS.outbox, []),
   setOutbox: (v) => write(KEYS.outbox, v),
+  // Inventario fisico en curso (se puede contar en varias sentadas).
+  inventario: () => read(KEYS.inventario, null),
+  setInventario: (v) => write(KEYS.inventario, v),
+  // Actas de inventarios cerrados que todavia no suben al servidor.
+  actas: () => read(KEYS.actas, []),
+  setActas: (v) => write(KEYS.actas, v),
   borrarTodo: () => {
     for (const k of Object.values(KEYS)) {
       try { localStorage.removeItem(k); } catch { /* noop */ }
