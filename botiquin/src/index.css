@@ -449,6 +449,19 @@ input { background: var(--tarjeta); }
 .item__texto small { color: var(--suave); font-size: .8rem; }
 .item__flecha { color: var(--suave); }
 
+.resumen-valor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  font-weight: 600;
+}
+.resumen-valor__label { color: var(--suave); }
+.resumen-valor__monto { font-size: 1.15rem; color: var(--verde); }
+
 /* ---------- hoja / formularios ---------- */
 
 .sheet-fondo {

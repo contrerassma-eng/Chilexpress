@@ -183,12 +183,13 @@ export function StoreProvider({ children }) {
       name: '',
       zona: '',
       qty: 1,
+      precio: null,
       ...extra
     });
 
     return {
-      comprar: ({ barcode, name, expiry, qty, note, zona }) =>
-        encolar(base({ kind: 'compra', barcode, name, zona, expiry: expiry || '', qty: Math.max(1, qty || 1), note })),
+      comprar: ({ barcode, name, expiry, qty, note, zona, precio }) =>
+        encolar(base({ kind: 'compra', barcode, name, zona, expiry: expiry || '', qty: Math.max(1, qty || 1), note, precio })),
 
       // Descuenta empezando por el lote que vence primero (FEFO).
       consumir: (item, cantidad, kind = 'consumo') => {
@@ -223,7 +224,8 @@ export function StoreProvider({ children }) {
             name: item.name,
             zona: item.zona,
             expiry: l.expiry,
-            qty: l.qty
+            qty: l.qty,
+            precio: l.precio
           })
         );
         // Sin stock no hay lotes que mover, pero el nombre y la zona se conservan.

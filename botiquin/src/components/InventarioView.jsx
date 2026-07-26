@@ -57,6 +57,16 @@ export default function InventarioView({ items, zona, onAbrir }) {
         ))}
       </div>
 
+      {(() => {
+        const r = resumen(deLaZona);
+        return r.valor && (
+          <div className="resumen-valor">
+            <span className="resumen-valor__label">Valor total:</span>
+            <span className="resumen-valor__monto">${r.valor.toFixed(2)}</span>
+          </div>
+        );
+      })()}
+
       {lista.length === 0 ? (
         <p className="vacio">
           {deLaZona.length === 0

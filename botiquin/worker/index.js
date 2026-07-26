@@ -27,6 +27,11 @@ const JSON_HEADERS = {
 const KINDS = new Set(['compra', 'consumo', 'descarte', 'ajuste', 'nombre', 'borrar']);
 const KINDS_SIN_CANTIDAD = new Set(['ajuste', 'nombre', 'borrar']);
 
+function precio(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 // Zonas de la casa. Cualquier otra cosa se ignora y el producto queda donde estaba.
 const ZONAS = new Set(['botiquin', 'despensa', 'refrigerador', 'aseo']);
 
@@ -73,7 +78,7 @@ function isoOf(v) {
 async function readState(env) {
   const [products, lots] = await env.DB.batch([
     env.DB.prepare('SELECT barcode, name, note, zona, created_at, updated_at FROM products ORDER BY name'),
-    env.DB.prepare('SELECT id, barcode, expiry, qty, updated_at FROM lots WHERE qty > 0')
+    env.DB.prepare('SELECT id, barcode, expiry, qty, precio, updated_at FROM lots WHERE qty > 0')
   ]);
   return {
     products: products.results ?? [],
@@ -108,6 +113,7 @@ async function applyMovements(env, raw, who) {
       zona: ZONAS.has(zona) ? zona : '',
       expiry: expiryOf(m?.expiry),
       qty,
+      precio: precio(m?.precio),
       at: isoOf(m?.at),
       who: str(m?.who || who, 40)
     });
@@ -169,22 +175,24 @@ async function applyMovements(env, raw, who) {
     if (m.kind === 'compra') {
       stmts.push(
         env.DB.prepare(
-          `INSERT INTO lots (id, barcode, expiry, qty, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5)
+          `INSERT INTO lots (id, barcode, expiry, qty, precio, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)
            ON CONFLICT(barcode, expiry) DO UPDATE SET
              qty = lots.qty + excluded.qty,
+             precio = CASE WHEN excluded.precio IS NOT NULL THEN excluded.precio ELSE lots.precio END,
              updated_at = excluded.updated_at`
-        ).bind(lotId, m.barcode, m.expiry, m.qty, appliedAt)
+        ).bind(lotId, m.barcode, m.expiry, m.qty, m.precio, appliedAt)
       );
     } else if (m.kind === 'ajuste') {
       stmts.push(
         env.DB.prepare(
-          `INSERT INTO lots (id, barcode, expiry, qty, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5)
+          `INSERT INTO lots (id, barcode, expiry, qty, precio, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)
            ON CONFLICT(barcode, expiry) DO UPDATE SET
              qty = excluded.qty,
+             precio = CASE WHEN excluded.precio IS NOT NULL THEN excluded.precio ELSE lots.precio END,
              updated_at = excluded.updated_at`
-        ).bind(lotId, m.barcode, m.expiry, m.qty, appliedAt)
+        ).bind(lotId, m.barcode, m.expiry, m.qty, m.precio, appliedAt)
       );
     } else {
       // consumo / descarte: nunca dejamos stock negativo.

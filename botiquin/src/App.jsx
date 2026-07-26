@@ -151,11 +151,11 @@ export default function App() {
     setMenu(false);
     descargarCsv(
       `inventario_${marcaDeTiempo()}.csv`,
-      ['Producto', 'Codigo', 'Zona', 'Vence', 'Cantidad', 'Estado'],
+      ['Producto', 'Codigo', 'Zona', 'Vence', 'Cantidad', 'Precio Unit', 'Subtotal', 'Estado'],
       b.items.flatMap((i) => (
         i.lotes.length
-          ? i.lotes.map((l) => [i.name, i.barcode, zonaDe(i.zona).nombre, l.expiry || 'sin fecha', l.qty, i.estado])
-          : [[i.name, i.barcode, zonaDe(i.zona).nombre, '', 0, 'agotado']]
+          ? i.lotes.map((l) => [i.name, i.barcode, zonaDe(i.zona).nombre, l.expiry || 'sin fecha', l.qty, l.precio || '', l.precio ? (l.qty * l.precio).toFixed(2) : '', i.estado])
+          : [[i.name, i.barcode, zonaDe(i.zona).nombre, '', 0, '', '', 'agotado']]
       ))
     );
   }

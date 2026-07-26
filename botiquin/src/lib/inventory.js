@@ -42,15 +42,17 @@ function applyMovement(products, lots, m) {
   if (m.kind === 'nombre') return;
 
   const k = key(barcode, m.expiry);
-  const actual = lots.get(k)?.qty || 0;
+  const actual = lots.get(k);
 
-  let siguiente = actual;
-  if (m.kind === 'compra') siguiente = actual + m.qty;
+  let siguiente = actual?.qty || 0;
+  if (m.kind === 'compra') siguiente = siguiente + m.qty;
   else if (m.kind === 'ajuste') siguiente = Math.max(0, m.qty);
-  else siguiente = Math.max(0, actual - m.qty); // consumo / descarte
+  else siguiente = Math.max(0, siguiente - m.qty); // consumo / descarte
 
-  if (siguiente > 0) lots.set(k, { barcode, expiry: m.expiry || '', qty: siguiente });
-  else lots.delete(k);
+  if (siguiente > 0) {
+    const precio = m.precio ?? actual?.precio;
+    lots.set(k, { barcode, expiry: m.expiry || '', qty: siguiente, precio });
+  } else lots.delete(k);
 }
 
 /** Ordena lotes por vencimiento: primero el que caduca antes, sin fecha al final. */
@@ -69,7 +71,7 @@ export function project(snapshot, outbox = []) {
 
   for (const p of snapshot?.products || []) products.set(p.barcode, p);
   for (const l of snapshot?.lots || []) {
-    if (l.qty > 0) lots.set(key(l.barcode, l.expiry), { barcode: l.barcode, expiry: l.expiry || '', qty: l.qty });
+    if (l.qty > 0) lots.set(key(l.barcode, l.expiry), { barcode: l.barcode, expiry: l.expiry || '', qty: l.qty, precio: l.precio });
   }
   for (const m of outbox) applyMovement(products, lots, m);
 
@@ -83,6 +85,7 @@ export function project(snapshot, outbox = []) {
   for (const p of products.values()) {
     const lotes = ordenarLotes(porProducto.get(p.barcode) || []);
     const total = lotes.reduce((s, l) => s + l.qty, 0);
+    const valor = lotes.reduce((s, l) => s + (l.precio ? l.qty * l.precio : 0), 0);
     const conFecha = lotes.find((l) => l.expiry);
     const zona = esZona(p.zona) ? p.zona : ZONA_POR_DEFECTO;
     items.push({
@@ -93,6 +96,7 @@ export function project(snapshot, outbox = []) {
       aviso: zonaDe(zona).aviso,
       lotes,
       total,
+      valor: valor > 0 ? valor : null,
       proximo: conFecha?.expiry || '',
       estado: total === 0 ? 'agotado' : expiryState(conFecha?.expiry || '', zonaDe(zona).aviso)
     });
@@ -125,12 +129,14 @@ function contar(items) {
   let vencidos = 0;
   let porVencer = 0;
   let agotados = 0;
+  let valor = 0;
   for (const i of items) {
     if (i.estado === 'agotado') agotados += 1;
     else if (i.estado === 'vencido') vencidos += 1;
     else if (i.estado === 'pronto') porVencer += 1;
+    if (i.valor) valor += i.valor;
   }
-  return { vencidos, porVencer, agotados, total: items.length, conStock: items.length - agotados };
+  return { vencidos, porVencer, agotados, total: items.length, conStock: items.length - agotados, valor: valor > 0 ? valor : null };
 }
 
 /** Totales de toda la casa y de cada zona por separado. */
