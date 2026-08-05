@@ -1,0 +1,318 @@
+import { useEffect, useRef, useState } from 'react';
+import { useBotiquin } from './state/store.jsx';
+import PinGate from './components/PinGate.jsx';
+import ScanView from './components/ScanView.jsx';
+import InventarioView from './components/InventarioView.jsx';
+import HistorialView from './components/HistorialView.jsx';
+import CompraSheet from './components/CompraSheet.jsx';
+import ConsumoSheet from './components/ConsumoSheet.jsx';
+import ProductoSheet from './components/ProductoSheet.jsx';
+import SelectorZona from './components/SelectorZona.jsx';
+import ContarSheet from './components/ContarSheet.jsx';
+import CuadreView from './components/CuadreView.jsx';
+import { codigoSinBarras, variantesGtin } from './lib/codes.js';
+import { almacen } from './lib/storage.js';
+import { ZONA_POR_DEFECTO, zonaDe } from './lib/zonas.js';
+import { claveLinea, cuadrar } from './lib/conteo.js';
+import { descargarCsv, marcaDeTiempo } from './lib/csv.js';
+
+const ESTADO_SYNC = {
+  idle: { texto: 'conectando', clase: 'espera' },
+  sincronizando: { texto: 'sincronizando', clase: 'espera' },
+  ok: { texto: 'al día', clase: 'ok' },
+  'sin-conexion': { texto: 'sin señal', clase: 'aviso' },
+  error: { texto: 'error', clase: 'malo' }
+};
+
+export default function App() {
+  const b = useBotiquin();
+  const [tab, setTab] = useState('escanear');
+  const [modo, setModo] = useState('compra');
+  // La zona elegida se recuerda: si ordenas la despensa, sigues en la despensa.
+  const [zona, setZona] = useState(() => almacen.zona() || ZONA_POR_DEFECTO);
+  const [hoja, setHoja] = useState(null);
+  const [flash, setFlash] = useState('');
+  const [menu, setMenu] = useState(false);
+  const [cuadre, setCuadre] = useState(null);
+  const instalador = useRef(null);
+  const [sePuedeInstalar, setSePuedeInstalar] = useState(false);
+  const temporizador = useRef(0);
+
+  // Android ofrece instalar la app; iOS lo hace desde el menu Compartir.
+  useEffect(() => {
+    const capturar = (e) => {
+      e.preventDefault();
+      instalador.current = e;
+      setSePuedeInstalar(true);
+    };
+    window.addEventListener('beforeinstallprompt', capturar);
+    return () => window.removeEventListener('beforeinstallprompt', capturar);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(temporizador.current), []);
+  useEffect(() => { almacen.setZona(zona); }, [zona]);
+
+  function avisar(texto) {
+    setFlash(texto);
+    window.clearTimeout(temporizador.current);
+    temporizador.current = window.setTimeout(() => setFlash(''), 2200);
+  }
+
+  // El botiquín entra directo. Solo pedimos PIN si el Worker lo exige, es decir
+  // si alguna petición volvió con 401 porque hay un PIN configurado.
+  if (b.state.pinInvalido) {
+    return (
+      <PinGate
+        aviso={b.state.pin
+          ? 'Ese PIN no es el del hogar. Prueba otra vez.'
+          : 'Este botiquín está protegido con un PIN.'}
+        onEntrar={(pin, quien) => { b.setPin(pin); b.setQuien(quien); }}
+      />
+    );
+  }
+
+  const itemActivo = hoja ? b.byBarcode.get(hoja.barcode) : null;
+
+  // Un mismo envase puede leerse comprimido o expandido segun el lector, asi
+  // que probamos todas las formas equivalentes antes de darlo por desconocido.
+  function buscarPorCodigo(barcode) {
+    if (!barcode) return null;
+    for (const clave of variantesGtin(barcode)) {
+      const encontrado = b.byBarcode.get(clave);
+      if (encontrado) return encontrado;
+    }
+    return null;
+  }
+
+  function alDetectar(dato) {
+    const item = buscarPorCodigo(dato.barcode);
+    // Si ya lo conociamos con otra variante del codigo, seguimos usando la suya.
+    const barcode = item ? item.barcode : dato.barcode;
+    if (modo === 'inventario') {
+      setHoja({ tipo: 'contar', barcode, expiry: dato.expiry || '' });
+      return;
+    }
+    // En consumo, un codigo desconocido o sin stock se trata como alta nueva.
+    if (modo === 'compra' || !item || item.total === 0) {
+      setHoja({
+        tipo: 'compra',
+        barcode,
+        expiry: dato.expiry || '',
+        avisoConsumo: modo === 'consumo'
+      });
+    } else {
+      setHoja({ tipo: 'consumo', barcode });
+    }
+  }
+
+  function vincular(existente) {
+    b.vincular(existente, hoja.barcode);
+    avisar(`${existente.name} ahora tiene su código`);
+  }
+
+  function guardarCompra({ barcode, name, qty, expiry, zona: destino }) {
+    const codigo = barcode || codigoSinBarras(name);
+    b.comprar({ barcode: codigo, name, qty, expiry, zona: destino });
+    setHoja(null);
+    avisar(`+${qty} ${name} → ${zonaDe(destino).nombre}`);
+  }
+
+  function consumir(cantidad, kind) {
+    if (!itemActivo) return;
+    const sacados = b.consumir(itemActivo, cantidad, kind);
+    setHoja(null);
+    avisar(`${kind === 'descarte' ? 'Botados ' : '−'}${sacados} ${itemActivo.name}`);
+  }
+
+  function anotarConteo(linea) {
+    b.contar(linea);
+    setHoja(null);
+    avisar(`${linea.name}: ${linea.contado}`);
+  }
+
+  function terminarInventario() {
+    setCuadre(cuadrar({
+      items: b.items,
+      byBarcode: b.byBarcode,
+      conteo: b.inventario?.conteo || {},
+      zona: b.inventario?.zona || 'todas'
+    }));
+  }
+
+  function confirmarInventario() {
+    b.cerrarInventario(cuadre);
+    const dif = cuadre.diferencias.length;
+    setCuadre(null);
+    setModo('compra');
+    avisar(dif ? `Inventario aplicado · ${dif} diferencia(s)` : 'Inventario aplicado · todo cuadraba');
+  }
+
+  function exportarInventario() {
+    setMenu(false);
+    descargarCsv(
+      `inventario_${marcaDeTiempo()}.csv`,
+      ['Producto', 'Codigo', 'Zona', 'Vence', 'Cantidad', 'Precio Unit', 'Subtotal', 'Estado'],
+      b.items.flatMap((i) => (
+        i.lotes.length
+          ? i.lotes.map((l) => [i.name, i.barcode, zonaDe(i.zona).nombre, l.expiry || 'sin fecha', l.qty, l.precio || '', l.precio ? (l.qty * l.precio).toFixed(2) : '', i.estado])
+          : [[i.name, i.barcode, zonaDe(i.zona).nombre, '', 0, '', '', 'agotado']]
+      ))
+    );
+  }
+
+  // Sin pantalla de PIN nadie pregunta el nombre, asi que queda a mano en el menu.
+  function cambiarQuien() {
+    setMenu(false);
+    const nombre = prompt('¿Quién usa este teléfono? Aparece en el historial.', b.state.who || '');
+    if (nombre !== null) b.setQuien(nombre.trim());
+  }
+
+  async function instalar() {
+    setMenu(false);
+    if (instalador.current) {
+      instalador.current.prompt();
+      instalador.current = null;
+      setSePuedeInstalar(false);
+      return;
+    }
+    alert(
+      'Para dejarla como app:\n\n' +
+      'iPhone (Safari): botón Compartir → "Agregar a inicio".\n' +
+      'Android (Chrome): menú ⋮ → "Agregar a la pantalla principal".'
+    );
+  }
+
+  const sync = ESTADO_SYNC[b.state.sync] || ESTADO_SYNC.idle;
+
+  if (cuadre) {
+    return (
+      <CuadreView
+        cuadre={cuadre}
+        zona={b.inventario?.zona || 'todas'}
+        iniciado={b.inventario?.iniciado}
+        onConfirmar={confirmarInventario}
+        onSeguir={() => setCuadre(null)}
+        onCancelar={() => {
+          if (confirm('¿Descartar el conteo? No se aplica ningún cambio al stock.')) {
+            b.cancelarInventario();
+            setCuadre(null);
+            setModo('compra');
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="app">
+      <header className="barra">
+        <h1>Casa</h1>
+        <button className={`estado estado--${sync.clase}`} onClick={b.sincronizar} title={b.state.error}>
+          {sync.texto}
+          {b.pendientes > 0 && <span className="estado__n">{b.pendientes}</span>}
+        </button>
+        <button className="barra__menu" aria-label="Menú" onClick={() => setMenu((m) => !m)}>⋮</button>
+        {menu && (
+          <div className="menu" onClick={() => setMenu(false)}>
+            <button onClick={instalar}>{sePuedeInstalar ? 'Instalar en el teléfono' : 'Cómo instalarla'}</button>
+            <button onClick={() => { setMenu(false); b.sincronizar(); }}>Sincronizar ahora</button>
+            <button onClick={exportarInventario}>Exportar inventario (CSV)</button>
+            <button onClick={cambiarQuien}>
+              Quién usa este teléfono{b.state.who ? `: ${b.state.who}` : ''}
+            </button>
+            <button className="peligro" onClick={() => { if (confirm('¿Borrar los datos guardados en este teléfono? El botiquín no se toca.')) b.salir(); }}>
+              Borrar datos de este teléfono
+            </button>
+          </div>
+        )}
+      </header>
+
+      {tab !== 'historial' && (
+        <SelectorZona zona={zona} onZona={setZona} totales={b.totales} todas={tab === 'inventario'} />
+      )}
+
+      {b.totales.vencidos > 0 && tab !== 'inventario' && (
+        <button className="banner banner--malo" onClick={() => { setZona('todas'); setTab('inventario'); }}>
+          {b.totales.vencidos} producto(s) vencido(s) en la casa
+        </button>
+      )}
+
+      <main className="contenido">
+        {tab === 'escanear' && (
+          <ScanView
+            modo={modo}
+            setModo={setModo}
+            onDetectado={alDetectar}
+            pausado={!!hoja || !!cuadre}
+            zona={zona}
+            inventario={b.inventario}
+            onIniciarInventario={b.iniciarInventario}
+            onTerminarInventario={terminarInventario}
+            onBorrarLinea={b.borrarLinea}
+          />
+        )}
+        {tab === 'inventario' && (
+          <InventarioView
+            items={b.items}
+            zona={zona}
+            onAbrir={(item) => setHoja({ tipo: 'producto', barcode: item.barcode })}
+          />
+        )}
+        {tab === 'historial' && <HistorialView pin={b.state.pin} pendientes={b.pendientes} />}
+      </main>
+
+      {flash && <div className="flash">{flash}</div>}
+
+      <nav className="pestanas">
+        <button className={tab === 'escanear' ? 'activa' : ''} onClick={() => setTab('escanear')}>Escanear</button>
+        <button className={tab === 'inventario' ? 'activa' : ''} onClick={() => setTab('inventario')}>
+          Inventario <span className="pestanas__n">{b.totales.conStock}</span>
+        </button>
+        <button className={tab === 'historial' ? 'activa' : ''} onClick={() => setTab('historial')}>Historial</button>
+      </nav>
+
+      {hoja?.tipo === 'compra' && (
+        <CompraSheet
+          // Al vincular, el producto pasa a ser conocido: la ficha se rehace
+          // sola con el nombre y la zona ya puestos.
+          key={itemActivo ? 'conocido' : 'nuevo'}
+          barcode={hoja.barcode}
+          item={itemActivo}
+          candidatos={b.items}
+          expiryInicial={hoja.expiry}
+          zonaActiva={zona}
+          avisoConsumo={hoja.avisoConsumo}
+          onGuardar={guardarCompra}
+          onVincular={vincular}
+          onClose={() => setHoja(null)}
+        />
+      )}
+
+      {hoja?.tipo === 'contar' && (
+        <ContarSheet
+          barcode={hoja.barcode}
+          item={itemActivo}
+          expiryInicial={hoja.expiry}
+          zonaActiva={b.inventario?.zona || zona}
+          yaContado={b.inventario?.conteo?.[claveLinea(hoja.barcode, hoja.expiry)]}
+          onContar={anotarConteo}
+          onClose={() => setHoja(null)}
+        />
+      )}
+
+      {hoja?.tipo === 'consumo' && itemActivo && (
+        <ConsumoSheet item={itemActivo} onConsumir={consumir} onClose={() => setHoja(null)} />
+      )}
+
+      {hoja?.tipo === 'producto' && itemActivo && (
+        <ProductoSheet
+          item={itemActivo}
+          onClose={() => setHoja(null)}
+          onRenombrar={(barcode, nombre, destino) => { b.renombrar(barcode, nombre, destino); avisar('Ficha actualizada'); }}
+          onAjustar={(item, expiry, cantidad) => b.ajustar(item, expiry, cantidad)}
+          onBorrar={(item) => { b.borrar(item); avisar(`${item.name} eliminado`); }}
+        />
+      )}
+    </div>
+  );
+}
