@@ -25,7 +25,6 @@ export default function CompraSheet({
   const [nombre, setNombre] = useState(item?.name || '');
   const [cantidad, setCantidad] = useState(1);
   const [expiry, setExpiry] = useState(expiryInicial);
-  const [precioUnit, setPrecioUnit] = useState('');
 
   const puedeGuardar = nombre.trim().length > 0;
 
@@ -50,8 +49,7 @@ export default function CompraSheet({
   function guardar(e) {
     e.preventDefault();
     if (!puedeGuardar) return;
-    const precio = precioUnit.trim() ? Number(precioUnit) : null;
-    onGuardar({ barcode, name: nombre.trim(), qty: cantidad, expiry, zona, precio: Number.isFinite(precio) && precio >= 0 ? precio : null });
+    onGuardar({ barcode, name: nombre.trim(), qty: cantidad, expiry, zona });
   }
 
   return (
@@ -100,20 +98,6 @@ export default function CompraSheet({
         <label>
           Cantidad que entra
           <Cantidad valor={cantidad} onChange={setCantidad} />
-        </label>
-
-        <label>
-          Precio unitario
-          <span className="opcional"> (opcional)</span>
-          <input
-            type="number"
-            value={precioUnit}
-            onChange={(e) => setPrecioUnit(e.target.value)}
-            placeholder="0"
-            step="0.01"
-            min="0"
-            inputMode="decimal"
-          />
         </label>
 
         <label>
